@@ -922,17 +922,28 @@ void drawMainScreen() {
     display.println(formatTime(operationDuration));
   }
 
-  // Status indicators
+  // Status indicators - expanded without MENU label
   display.setCursor(0, 54);
-  display.print(F("[MENU]"));
-
-  display.setCursor(80, 54);
   display.print(F("WiFi:"));
-  display.print(wifiConnected ? "+" : "-");
+  if (wifiConnected) {
+    if (apMode) {
+      display.print(F("AP"));
+    } else {
+      display.print(F("OK"));
+    }
+  } else {
+    display.print(F("--"));
+  }
 
-  display.setCursor(110, 54);
-  display.print(F("MQ:"));
-  display.print(mqttConnected ? "+" : "-");
+  display.setCursor(64, 54);
+  display.print(F("MQTT:"));
+  if (mqttConnected) {
+    display.print(F("OK"));
+  } else if (wifiConnected && !apMode) {
+    display.print(F(".."));
+  } else {
+    display.print(F("--"));
+  }
 }
 
 void drawMenuScreen() {
@@ -1147,6 +1158,18 @@ void handleEncoder() {
     if (currentScreen == SCREEN_EDIT_VALUE) {
       editValue += direction * step;
       editValue = constrain(editValue, editMin, editMax);
+    } else if (currentScreen == SCREEN_MAIN && systemState != STATE_IDLE &&
+               systemState != STATE_ERROR && systemState != STATE_COMPLETE &&
+               systemState != STATE_COOLING) {
+      // Adjust target temperature while running (from control panel)
+      float maxTemp = (operatingMode == MODE_REFLOW) ? REFLOW_MAX_TEMP : FILAMENT_MAX_TEMP;
+      float minTemp = (operatingMode == MODE_FILAMENT) ? FILAMENT_TEMP_MIN : 50;
+      targetTemp += direction * step;
+      targetTemp = constrain(targetTemp, minTemp, maxTemp);
+      // Also update the settings for filament mode
+      if (operatingMode == MODE_FILAMENT) {
+        filamentTemp = (int)targetTemp;
+      }
     } else {
       handleMenuNavigation(direction);
     }
@@ -1584,10 +1607,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       stopOperation();
     }
   } else if (topicStr == baseTopic + "/command/set_temp") {
-    // Set target temperature (only within limits)
+    // Set target temperature while running (within limits)
     float newTemp = payloadStr.toFloat();
     float maxTemp = (operatingMode == MODE_REFLOW) ? REFLOW_MAX_TEMP : FILAMENT_MAX_TEMP;
-    float minTemp = (operatingMode == MODE_FILAMENT) ? FILAMENT_TEMP_MIN : 0;
+    float minTemp = (operatingMode == MODE_FILAMENT) ? FILAMENT_TEMP_MIN : 50;
 
     if (newTemp >= minTemp && newTemp <= maxTemp) {
       targetTemp = newTemp;
@@ -1604,6 +1627,50 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         operatingMode = MODE_FILAMENT;
       }
     }
+  } else if (topicStr == baseTopic + "/command/filament/temp") {
+    // Set filament temperature (can be set anytime, takes effect on next run or immediately if running)
+    int newTemp = payloadStr.toInt();
+    if (newTemp >= FILAMENT_TEMP_MIN && newTemp <= FILAMENT_MAX_TEMP) {
+      filamentTemp = newTemp;
+      if (operatingMode == MODE_FILAMENT && systemState != STATE_IDLE) {
+        targetTemp = filamentTemp;
+      }
+      saveSettings();
+    }
+  } else if (topicStr == baseTopic + "/command/filament/duration") {
+    // Set filament duration in minutes
+    int newDuration = payloadStr.toInt();
+    if (newDuration >= FILAMENT_TIME_MIN && newDuration <= FILAMENT_TIME_MAX) {
+      filamentDuration = newDuration;
+      if (operatingMode == MODE_FILAMENT && systemState != STATE_IDLE) {
+        operationDuration = filamentDuration * 60UL;
+      }
+      saveSettings();
+    }
+  } else if (topicStr == baseTopic + "/command/filament/type") {
+    // Set filament type preset
+    if (payloadStr == "pla") {
+      selectedFilament = FILAMENT_PLA;
+      filamentTemp = FILAMENT_PLA_TEMP;
+      filamentDuration = FILAMENT_PLA_TIME;
+    } else if (payloadStr == "petg") {
+      selectedFilament = FILAMENT_PETG;
+      filamentTemp = FILAMENT_PETG_TEMP;
+      filamentDuration = FILAMENT_PETG_TIME;
+    } else if (payloadStr == "abs") {
+      selectedFilament = FILAMENT_ABS;
+      filamentTemp = FILAMENT_ABS_TEMP;
+      filamentDuration = FILAMENT_ABS_TIME;
+    } else if (payloadStr == "nylon") {
+      selectedFilament = FILAMENT_NYLON;
+      filamentTemp = FILAMENT_NYLON_TEMP;
+      filamentDuration = FILAMENT_NYLON_TIME;
+    } else if (payloadStr == "tpu") {
+      selectedFilament = FILAMENT_TPU;
+      filamentTemp = FILAMENT_TPU_TEMP;
+      filamentDuration = FILAMENT_TPU_TIME;
+    }
+    saveSettings();
   }
   // Note: Start command is NOT implemented (per FSD security requirement)
 }
@@ -1644,6 +1711,24 @@ void publishStatus() {
   // WiFi RSSI
   mqttClient.publish((baseTopic + "/wifi/rssi").c_str(),
                      String(WiFi.RSSI()).c_str(), false);
+
+  // Filament settings
+  mqttClient.publish((baseTopic + "/filament/temp").c_str(),
+                     String(filamentTemp).c_str(), true);
+  mqttClient.publish((baseTopic + "/filament/duration").c_str(),
+                     String(filamentDuration).c_str(), true);
+
+  // Filament type name
+  const char* filamentTypeName;
+  switch (selectedFilament) {
+    case FILAMENT_PLA: filamentTypeName = "pla"; break;
+    case FILAMENT_PETG: filamentTypeName = "petg"; break;
+    case FILAMENT_ABS: filamentTypeName = "abs"; break;
+    case FILAMENT_NYLON: filamentTypeName = "nylon"; break;
+    case FILAMENT_TPU: filamentTypeName = "tpu"; break;
+    default: filamentTypeName = "custom"; break;
+  }
+  mqttClient.publish((baseTopic + "/filament/type").c_str(), filamentTypeName, true);
 }
 
 void publishDiscovery() {
@@ -1694,10 +1779,12 @@ void publishDiscovery() {
 // ===========================================
 
 void handleWebSetup();
+void handleWebFilament();
 
 void setupWebServer() {
   webServer.on("/", HTTP_GET, handleWebRoot);
   webServer.on("/setup", HTTP_GET, handleWebSetup);
+  webServer.on("/filament", HTTP_GET, handleWebFilament);
   webServer.on("/api/status", HTTP_GET, handleWebAPI);
   webServer.on("/api/stop", HTTP_POST, []() {
     if (systemState != STATE_IDLE && systemState != STATE_ERROR) {
@@ -1745,6 +1832,137 @@ void setupWebServer() {
       webServer.send(400, "application/json", "{\"error\":\"No data\"}");
     }
   });
+
+  // Filament settings API
+  webServer.on("/api/filament", HTTP_GET, []() {
+    StaticJsonDocument<256> doc;
+    doc["temp"] = filamentTemp;
+    doc["duration"] = filamentDuration;
+    doc["type"] = (int)selectedFilament;
+
+    const char* typeName;
+    switch (selectedFilament) {
+      case FILAMENT_PLA: typeName = "PLA"; break;
+      case FILAMENT_PETG: typeName = "PETG"; break;
+      case FILAMENT_ABS: typeName = "ABS"; break;
+      case FILAMENT_NYLON: typeName = "Nylon"; break;
+      case FILAMENT_TPU: typeName = "TPU"; break;
+      default: typeName = "Custom"; break;
+    }
+    doc["typeName"] = typeName;
+    doc["tempMin"] = FILAMENT_TEMP_MIN;
+    doc["tempMax"] = FILAMENT_MAX_TEMP;
+    doc["durationMin"] = FILAMENT_TIME_MIN;
+    doc["durationMax"] = FILAMENT_TIME_MAX;
+
+    String response;
+    serializeJson(doc, response);
+    webServer.send(200, "application/json", response);
+  });
+
+  webServer.on("/api/filament", HTTP_POST, []() {
+    if (webServer.hasArg("plain")) {
+      StaticJsonDocument<256> doc;
+      DeserializationError error = deserializeJson(doc, webServer.arg("plain"));
+
+      if (!error) {
+        bool changed = false;
+
+        if (doc.containsKey("temp")) {
+          int newTemp = doc["temp"].as<int>();
+          if (newTemp >= FILAMENT_TEMP_MIN && newTemp <= FILAMENT_MAX_TEMP) {
+            filamentTemp = newTemp;
+            if (operatingMode == MODE_FILAMENT && systemState != STATE_IDLE) {
+              targetTemp = filamentTemp;
+            }
+            changed = true;
+          }
+        }
+
+        if (doc.containsKey("duration")) {
+          int newDuration = doc["duration"].as<int>();
+          if (newDuration >= FILAMENT_TIME_MIN && newDuration <= FILAMENT_TIME_MAX) {
+            filamentDuration = newDuration;
+            if (operatingMode == MODE_FILAMENT && systemState != STATE_IDLE) {
+              operationDuration = filamentDuration * 60UL;
+            }
+            changed = true;
+          }
+        }
+
+        if (doc.containsKey("type")) {
+          int newType = doc["type"].as<int>();
+          if (newType >= 0 && newType <= 5) {
+            selectedFilament = (FilamentType)newType;
+            switch (selectedFilament) {
+              case FILAMENT_PLA:
+                filamentTemp = FILAMENT_PLA_TEMP;
+                filamentDuration = FILAMENT_PLA_TIME;
+                break;
+              case FILAMENT_PETG:
+                filamentTemp = FILAMENT_PETG_TEMP;
+                filamentDuration = FILAMENT_PETG_TIME;
+                break;
+              case FILAMENT_ABS:
+                filamentTemp = FILAMENT_ABS_TEMP;
+                filamentDuration = FILAMENT_ABS_TIME;
+                break;
+              case FILAMENT_NYLON:
+                filamentTemp = FILAMENT_NYLON_TEMP;
+                filamentDuration = FILAMENT_NYLON_TIME;
+                break;
+              case FILAMENT_TPU:
+                filamentTemp = FILAMENT_TPU_TEMP;
+                filamentDuration = FILAMENT_TPU_TIME;
+                break;
+              case FILAMENT_CUSTOM:
+                // Keep current temp/duration
+                break;
+            }
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          saveSettings();
+        }
+        webServer.send(200, "application/json", "{\"success\":true}");
+      } else {
+        webServer.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+      }
+    } else {
+      webServer.send(400, "application/json", "{\"error\":\"No data\"}");
+    }
+  });
+
+  // Set target temperature while running
+  webServer.on("/api/set_temp", HTTP_POST, []() {
+    if (webServer.hasArg("plain")) {
+      StaticJsonDocument<64> doc;
+      DeserializationError error = deserializeJson(doc, webServer.arg("plain"));
+
+      if (!error && doc.containsKey("temp")) {
+        float newTemp = doc["temp"].as<float>();
+        float maxTemp = (operatingMode == MODE_REFLOW) ? REFLOW_MAX_TEMP : FILAMENT_MAX_TEMP;
+        float minTemp = (operatingMode == MODE_FILAMENT) ? FILAMENT_TEMP_MIN : 50;
+
+        if (newTemp >= minTemp && newTemp <= maxTemp) {
+          targetTemp = newTemp;
+          if (operatingMode == MODE_FILAMENT) {
+            filamentTemp = (int)newTemp;
+          }
+          webServer.send(200, "application/json", "{\"success\":true}");
+        } else {
+          webServer.send(400, "application/json", "{\"error\":\"Temperature out of range\"}");
+        }
+      } else {
+        webServer.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+      }
+    } else {
+      webServer.send(400, "application/json", "{\"error\":\"No data\"}");
+    }
+  });
+
   webServer.onNotFound(handleWebNotFound);
 
   webServer.begin();
@@ -1779,16 +1997,18 @@ void handleWebRoot() {
     .status { display: inline-block; padding: 5px 15px; border-radius: 20px;
               font-size: 0.9em; font-weight: bold; }
     .status-idle { background: #3d5a80; }
-    .status-heating { background: #ff6b6b; }
+    .status-heating, .status-preheating, .status-soaking, .status-reflow, .status-maintaining { background: #ff6b6b; }
     .status-cooling { background: #4ecdc4; }
     .status-error { background: #c1121f; }
     .status-complete { background: #2ec4b6; }
     .btn { display: block; width: 100%; padding: 15px; border: none;
            border-radius: 8px; font-size: 1em; cursor: pointer;
-           transition: background 0.3s; }
+           transition: background 0.3s; margin-bottom: 10px; }
     .btn-stop { background: #c1121f; color: white; }
     .btn-stop:hover { background: #a00; }
     .btn-stop:disabled { background: #555; cursor: not-allowed; }
+    .btn-link { background: #3d5a80; color: white; text-decoration: none; text-align: center; }
+    .btn-link:hover { background: #4a6d94; }
     .indicators { display: flex; gap: 15px; justify-content: center; margin-top: 10px; }
     .indicator { display: flex; align-items: center; gap: 5px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -1796,21 +2016,52 @@ void handleWebRoot() {
     .dot-off { background: #c1121f; }
     .warning { background: #ff9f1c; color: #000; padding: 15px; border-radius: 8px;
                margin-bottom: 20px; text-align: center; }
+    .temp-adjust { display: none; margin-top: 15px; }
+    .temp-adjust.show { display: block; }
+    .temp-slider { width: 100%; margin: 10px 0; }
+    .temp-buttons { display: flex; gap: 10px; justify-content: center; }
+    .temp-btn { padding: 10px 20px; background: #0f3460; border: 1px solid #00d9ff;
+                color: #00d9ff; border-radius: 5px; cursor: pointer; font-size: 1.2em; }
+    .temp-btn:hover { background: #1a4a7a; }
+    .temp-display { text-align: center; font-size: 1.5em; margin: 10px 0; color: #00d9ff; }
+    label { display: block; margin-bottom: 5px; color: #888; font-size: 0.9em; }
+    select, input[type="number"] { width: 100%; padding: 12px; border: 1px solid #0f3460;
+      border-radius: 6px; background: #0f3460; color: #fff; margin-bottom: 15px; font-size: 1em; }
+    select:focus, input:focus { outline: none; border-color: #00d9ff; }
+    .btn-save { background: #2ec4b6; color: white; }
+    .btn-save:hover { background: #25a99d; }
+    .nav-links { display: flex; gap: 10px; margin-bottom: 20px; }
+    .nav-links a { flex: 1; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Reflow Oven Controller</h1>
 
+    <div class="nav-links">
+      <a href="/filament" class="btn btn-link">Filament Settings</a>
+      <a href="/setup" class="btn btn-link">Network Setup</a>
+    </div>
+
     <div class="warning">
-      ⚠️ Start operation can only be done via physical controls
+      Start operation can only be done via physical controls
     </div>
 
     <div class="card">
-      <div class="temp-large" id="currentTemp">--°C</div>
+      <div class="temp-large" id="currentTemp">--C</div>
       <div class="stat">
         <span class="stat-label">Target</span>
-        <span class="stat-value" id="targetTemp">--°C</span>
+        <span class="stat-value" id="targetTemp">--C</span>
+      </div>
+      <div class="temp-adjust" id="tempAdjust">
+        <div class="temp-display">Adjust: <span id="newTemp">--</span>C</div>
+        <div class="temp-buttons">
+          <button class="temp-btn" onclick="adjustTemp(-5)">-5</button>
+          <button class="temp-btn" onclick="adjustTemp(-1)">-1</button>
+          <button class="temp-btn" onclick="adjustTemp(1)">+1</button>
+          <button class="temp-btn" onclick="adjustTemp(5)">+5</button>
+        </div>
+        <button class="btn btn-save" onclick="applyTemp()" style="margin-top:15px">Apply Temperature</button>
       </div>
     </div>
 
@@ -1850,12 +2101,16 @@ void handleWebRoot() {
   </div>
 
   <script>
+    let currentTargetTemp = 0;
+    let newTargetTemp = 0;
+    let isRunning = false;
+
     function updateStatus() {
       fetch('/api/status')
         .then(r => r.json())
         .then(data => {
-          document.getElementById('currentTemp').textContent = data.currentTemp.toFixed(1) + '°C';
-          document.getElementById('targetTemp').textContent = data.targetTemp.toFixed(1) + '°C';
+          document.getElementById('currentTemp').textContent = data.currentTemp.toFixed(1) + 'C';
+          document.getElementById('targetTemp').textContent = data.targetTemp.toFixed(1) + 'C';
           document.getElementById('mode').textContent = data.mode;
 
           const statusEl = document.getElementById('status');
@@ -1868,9 +2123,39 @@ void handleWebRoot() {
           document.getElementById('mqttDot').className = 'dot ' + (data.mqtt ? 'dot-on' : 'dot-off');
           document.getElementById('heaterDot').className = 'dot ' + (data.heater ? 'dot-on' : 'dot-off');
 
+          isRunning = (data.state !== 'IDLE' && data.state !== 'ERROR' && data.state !== 'COMPLETE' && data.state !== 'COOLING');
           document.getElementById('stopBtn').disabled = (data.state === 'IDLE' || data.state === 'ERROR');
+          document.getElementById('tempAdjust').className = 'temp-adjust' + (isRunning ? ' show' : '');
+
+          if (currentTargetTemp !== data.targetTemp) {
+            currentTargetTemp = data.targetTemp;
+            newTargetTemp = data.targetTemp;
+            document.getElementById('newTemp').textContent = newTargetTemp.toFixed(0);
+          }
         })
         .catch(err => console.error('Error:', err));
+    }
+
+    function adjustTemp(delta) {
+      newTargetTemp = Math.max(40, Math.min(260, newTargetTemp + delta));
+      document.getElementById('newTemp').textContent = newTargetTemp.toFixed(0);
+    }
+
+    function applyTemp() {
+      fetch('/api/set_temp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp: newTargetTemp })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          updateStatus();
+        } else {
+          alert('Error: ' + (data.error || 'Failed to set temperature'));
+        }
+      })
+      .catch(err => alert('Error setting temperature'));
     }
 
     function stopOven() {
@@ -1889,6 +2174,157 @@ void handleWebRoot() {
 
     updateStatus();
     setInterval(updateStatus, 2000);
+  </script>
+</body>
+</html>
+)rawliteral");
+
+  webServer.send(200, "text/html", html);
+}
+
+void handleWebFilament() {
+  String html = F(R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filament Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           background: #1a1a2e; color: #eee; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 20px; color: #00d9ff; }
+    .card { background: #16213e; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    .card h2 { font-size: 1.1em; margin-bottom: 15px; color: #00d9ff; border-bottom: 1px solid #0f3460; padding-bottom: 10px; }
+    label { display: block; margin-bottom: 5px; color: #888; font-size: 0.9em; }
+    select, input[type="number"] { width: 100%; padding: 12px; border: 1px solid #0f3460;
+      border-radius: 6px; background: #0f3460; color: #fff; margin-bottom: 15px; font-size: 1em; }
+    select:focus, input:focus { outline: none; border-color: #00d9ff; }
+    .btn { display: block; width: 100%; padding: 15px; border: none;
+           border-radius: 8px; font-size: 1em; cursor: pointer; margin-top: 10px; }
+    .btn-save { background: #2ec4b6; color: white; }
+    .btn-save:hover { background: #25a99d; }
+    .btn-back { background: #3d5a80; color: white; text-align: center; text-decoration: none; display: block; }
+    .btn-back:hover { background: #4a6d94; }
+    .msg { padding: 15px; border-radius: 8px; margin-bottom: 15px; display: none; }
+    .msg-success { background: #2ec4b6; display: block; }
+    .msg-error { background: #c1121f; display: block; }
+    .range-info { font-size: 0.85em; color: #666; margin-top: -10px; margin-bottom: 15px; }
+    .current-values { background: #0f3460; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .current-values div { display: flex; justify-content: space-between; padding: 5px 0; }
+    .current-values .label { color: #888; }
+    .current-values .value { color: #00d9ff; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Filament Settings</h1>
+    <div class="msg" id="msg"></div>
+
+    <div class="current-values">
+      <div><span class="label">Current Type:</span><span class="value" id="currentType">--</span></div>
+      <div><span class="label">Current Temp:</span><span class="value" id="currentTemp">--C</span></div>
+      <div><span class="label">Current Duration:</span><span class="value" id="currentDuration">-- hrs</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Filament Type Presets</h2>
+      <label>Select Filament Type</label>
+      <select id="filamentType" onchange="selectType()">
+        <option value="0">Custom</option>
+        <option value="1">PLA (45C, 4 hrs)</option>
+        <option value="2">PETG (65C, 4 hrs)</option>
+        <option value="3">ABS (70C, 4 hrs)</option>
+        <option value="4">Nylon (80C, 6 hrs)</option>
+        <option value="5">TPU (50C, 4 hrs)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>Custom Settings</h2>
+      <label>Temperature (C)</label>
+      <input type="number" id="temp" min="40" max="100" value="45">
+      <div class="range-info">Range: 40 - 100C</div>
+
+      <label>Duration (minutes)</label>
+      <input type="number" id="duration" min="60" max="1440" value="240">
+      <div class="range-info">Range: 60 - 1440 min (1 - 24 hours)</div>
+
+      <button class="btn btn-save" onclick="saveSettings()">Save Settings</button>
+    </div>
+
+    <a href="/" class="btn btn-back">Back to Dashboard</a>
+  </div>
+
+  <script>
+    function loadSettings() {
+      fetch('/api/filament')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('filamentType').value = data.type;
+          document.getElementById('temp').value = data.temp;
+          document.getElementById('duration').value = data.duration;
+          document.getElementById('currentType').textContent = data.typeName;
+          document.getElementById('currentTemp').textContent = data.temp + 'C';
+          document.getElementById('currentDuration').textContent = (data.duration / 60).toFixed(1) + ' hrs';
+        });
+    }
+
+    function selectType() {
+      const type = parseInt(document.getElementById('filamentType').value);
+      const presets = {
+        0: { temp: 45, duration: 240 },   // Custom - keep current
+        1: { temp: 45, duration: 240 },   // PLA
+        2: { temp: 65, duration: 240 },   // PETG
+        3: { temp: 70, duration: 240 },   // ABS
+        4: { temp: 80, duration: 360 },   // Nylon
+        5: { temp: 50, duration: 240 }    // TPU
+      };
+
+      if (type > 0 && presets[type]) {
+        document.getElementById('temp').value = presets[type].temp;
+        document.getElementById('duration').value = presets[type].duration;
+      }
+    }
+
+    function saveSettings() {
+      const type = parseInt(document.getElementById('filamentType').value);
+      const temp = parseInt(document.getElementById('temp').value);
+      const duration = parseInt(document.getElementById('duration').value);
+
+      const data = { temp, duration };
+      if (type > 0) {
+        data.type = type;
+      }
+
+      fetch('/api/filament', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(r => r.json())
+      .then(result => {
+        const msg = document.getElementById('msg');
+        if (result.success) {
+          msg.textContent = 'Settings saved successfully!';
+          msg.className = 'msg msg-success';
+          loadSettings();
+          setTimeout(() => { msg.className = 'msg'; }, 3000);
+        } else {
+          msg.textContent = 'Error: ' + (result.error || 'Unknown error');
+          msg.className = 'msg msg-error';
+        }
+      })
+      .catch(err => {
+        const msg = document.getElementById('msg');
+        msg.textContent = 'Connection error';
+        msg.className = 'msg msg-error';
+      });
+    }
+
+    loadSettings();
   </script>
 </body>
 </html>
