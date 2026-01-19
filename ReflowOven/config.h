@@ -57,15 +57,15 @@
 // ===========================================
 #define REFLOW_MAX_TEMP 260       // Hardware cutoff for reflow mode
 #define FILAMENT_MAX_TEMP 100     // Hardware cutoff for filament mode
-#define TEMP_CALIB_OFFSET -30.0   // Calibration offset in degrees C
+#define TEMP_CALIB_OFFSET 0.0     // Calibration offset in degrees C
 
 // AD8495 Temperature Conversion (Adafruit board)
 // Output: 5mV/°C with 1.25V reference at 0°C
-// Wemos D1 Mini ADC: 0-3.2V input range, 10-bit (0-1023)
+// Wemos D1 Mini ADC: 0-1V internal, with voltage divider for higher input
+// Note: ADC reference calibrated empirically (nominal 3.2V, actual ~2.7V)
 // Formula: Temp = (Vout - 1.25) / 0.005
-//          Vout = ADC * 3.2 / 1023
-//          Temp = (ADC * 3.2 / 1023 - 1.25) / 0.005
-#define ADC_REFERENCE_VOLTAGE 3.2
+//          Vout = ADC * ADC_REFERENCE_VOLTAGE / 1023
+#define ADC_REFERENCE_VOLTAGE 2.7
 #define AD8495_OFFSET_VOLTAGE 1.25
 #define AD8495_MV_PER_C 0.005
 
