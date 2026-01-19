@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reflow Oven Quick Reference</title>
+  <style>
+    @page {
+      size: 279mm 216mm;
+      margin: 10mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      width: 259mm;
+      height: 196mm;
+      padding: 5mm;
+      background: white;
+      color: #222;
+    }
+    h1 {
+      text-align: center;
+      font-size: 18pt;
+      margin-bottom: 4mm;
+      border-bottom: 2px solid #333;
+      padding-bottom: 2mm;
+    }
+    .content {
+      display: flex;
+      gap: 5mm;
+      height: calc(100% - 15mm);
+    }
+    .column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3mm;
+    }
+    .section {
+      border: 1px solid #666;
+      border-radius: 3mm;
+      padding: 3mm;
+      background: #f9f9f9;
+    }
+    .section h2 {
+      font-size: 12pt;
+      background: #333;
+      color: white;
+      margin: -3mm -3mm 2mm -3mm;
+      padding: 2mm 3mm;
+      border-radius: 2.5mm 2.5mm 0 0;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 2mm;
+      padding-bottom: 2mm;
+      border-bottom: 1px dotted #ccc;
+    }
+    .control-row:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .control-action {
+      font-weight: bold;
+      width: 35mm;
+      flex-shrink: 0;
+    }
+    .control-result {
+      flex: 1;
+    }
+    .icon {
+      display: inline-block;
+      width: 8mm;
+      height: 8mm;
+      border: 2px solid #333;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 7mm;
+      font-size: 10pt;
+      margin-right: 2mm;
+      vertical-align: middle;
+    }
+    .menu-tree {
+      font-size: 9pt;
+      line-height: 1.6;
+    }
+    .menu-tree ul {
+      list-style: none;
+      padding-left: 4mm;
+    }
+    .menu-tree > ul {
+      padding-left: 0;
+    }
+    .menu-item {
+      font-weight: bold;
+    }
+    .menu-desc {
+      color: #555;
+      font-weight: normal;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+    }
+    th, td {
+      border: 1px solid #999;
+      padding: 1.5mm 2mm;
+      text-align: left;
+    }
+    th {
+      background: #e0e0e0;
+      font-weight: bold;
+    }
+    .highlight {
+      background: #fff3cd;
+    }
+    .warning {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 2mm;
+      padding: 2mm;
+      font-size: 9pt;
+      margin-top: 2mm;
+    }
+    .temps {
+      display: flex;
+      gap: 2mm;
+      flex-wrap: wrap;
+    }
+    .temp-badge {
+      background: #e7e7e7;
+      border-radius: 2mm;
+      padding: 1mm 2mm;
+      font-size: 8pt;
+    }
+  </style>
+</head>
+<body>
+  <h1>Reflow Oven Controller - Quick Reference</h1>
+
+  <div class="content">
+    <div class="column">
+      <div class="section">
+        <h2>Button Controls</h2>
+        <div class="control-row">
+          <span class="control-action"><span class="icon">B</span> Short Press</span>
+          <span class="control-result">
+            <strong>Main screen:</strong> Open menu<br>
+            <strong>Menu:</strong> Select item<br>
+            <strong>Edit value:</strong> Save &amp; return<br>
+            <strong>Confirm screen:</strong> Start operation<br>
+            <strong>Error screen:</strong> Clear error
+          </span>
+        </div>
+        <div class="control-row">
+          <span class="control-action"><span class="icon">B</span> Hold 2 sec</span>
+          <span class="control-result">Go back one menu level</span>
+        </div>
+        <div class="control-row highlight">
+          <span class="control-action"><span class="icon">B</span> Hold 5 sec</span>
+          <span class="control-result">
+            <strong>When idle:</strong> Start operation (shows confirm)<br>
+            <strong>When running:</strong> STOP operation
+          </span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Encoder Controls</h2>
+        <div class="control-row">
+          <span class="control-action"><span class="icon">E</span> Rotate</span>
+          <span class="control-result">
+            <strong>Menu:</strong> Navigate up/down<br>
+            <strong>Edit value:</strong> Adjust value (+/- 1)<br>
+            <strong>Running:</strong> Adjust target temp
+          </span>
+        </div>
+        <div class="control-row">
+          <span class="control-action"><span class="icon">E</span> Rotate Fast</span>
+          <span class="control-result">Accelerated adjustment (+/- 5)</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Filament Drying Presets</h2>
+        <div class="temps">
+          <span class="temp-badge"><strong>PLA:</strong> 45°C / 4 hrs</span>
+          <span class="temp-badge"><strong>PETG:</strong> 65°C / 4 hrs</span>
+          <span class="temp-badge"><strong>ABS:</strong> 70°C / 4 hrs</span>
+          <span class="temp-badge"><strong>Nylon:</strong> 80°C / 6 hrs</span>
+          <span class="temp-badge"><strong>TPU:</strong> 50°C / 4 hrs</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Reflow Profile (Leaded Sn63/Pb37)</h2>
+        <table>
+          <tr>
+            <th>Phase</th>
+            <th>Temp</th>
+            <th>Duration</th>
+          </tr>
+          <tr>
+            <td>Preheat</td>
+            <td>to 130°C</td>
+            <td>-</td>
+          </tr>
+          <tr>
+            <td>Soak</td>
+            <td>130-160°C</td>
+            <td>90 sec</td>
+          </tr>
+          <tr>
+            <td>Reflow</td>
+            <td>210°C peak</td>
+            <td>45 sec</td>
+          </tr>
+          <tr>
+            <td>Cooling</td>
+            <td>to 80°C</td>
+            <td>-</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="column">
+      <div class="section" style="flex: 1;">
+        <h2>Menu Structure</h2>
+        <div class="menu-tree">
+          <ul>
+            <li><span class="menu-item">Select Mode</span>
+              <ul>
+                <li>Reflow Solder <span class="menu-desc">- PCB soldering</span></li>
+                <li>Filament Drying <span class="menu-desc">- 3D printer filament</span></li>
+              </ul>
+            </li>
+            <li><span class="menu-item">Reflow Settings</span>
+              <ul>
+                <li>Peak Temp <span class="menu-desc">- 195-230°C</span></li>
+                <li>Soak Temp <span class="menu-desc">- 120-170°C</span></li>
+                <li>Soak Time <span class="menu-desc">- 60-120 sec</span></li>
+              </ul>
+            </li>
+            <li><span class="menu-item">Filament Settings</span>
+              <ul>
+                <li>Filament Type <span class="menu-desc">- Preset selection</span></li>
+                <li>Temperature <span class="menu-desc">- 40-100°C</span></li>
+                <li>Duration <span class="menu-desc">- 1-24 hours</span></li>
+              </ul>
+            </li>
+            <li><span class="menu-item">Network Settings</span>
+              <ul>
+                <li>WiFi Status</li>
+                <li>MQTT Status</li>
+              </ul>
+            </li>
+            <li><span class="menu-item">System Info</span> <span class="menu-desc">- FW version, IP, etc.</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Display Status Indicators</h2>
+        <table>
+          <tr>
+            <th>Indicator</th>
+            <th>Meaning</th>
+          </tr>
+          <tr>
+            <td>WiFi: OK</td>
+            <td>Connected to network</td>
+          </tr>
+          <tr>
+            <td>WiFi: AP</td>
+            <td>Access Point mode (setup)</td>
+          </tr>
+          <tr>
+            <td>WiFi: --</td>
+            <td>Not connected</td>
+          </tr>
+          <tr>
+            <td>MQTT: OK</td>
+            <td>Connected to broker</td>
+          </tr>
+          <tr>
+            <td>MQTT: ..</td>
+            <td>Connecting...</td>
+          </tr>
+          <tr>
+            <td>MQTT: --</td>
+            <td>Not connected</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>Web Interface</h2>
+        <p style="font-size: 9pt;">
+          <strong>Dashboard:</strong> http://[device-ip]/<br>
+          <strong>Filament Settings:</strong> http://[device-ip]/filament<br>
+          <strong>Network Setup:</strong> http://[device-ip]/setup
+        </p>
+        <div class="warning">
+          <strong>Safety:</strong> Start can only be done via physical button (hold 5 sec).
+          Stop is available via web/MQTT.
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
