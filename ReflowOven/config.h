@@ -62,10 +62,10 @@
 // AD8495 Temperature Conversion (Adafruit board)
 // Output: 5mV/°C with 1.25V reference at 0°C
 // Wemos D1 Mini ADC: 0-1V internal, with voltage divider for higher input
-// Note: ADC reference calibrated empirically (nominal 3.2V, actual ~2.7V)
+// Note: ADC reference calibrated empirically (nominal 3.2V, actual ~3.0V)
 // Formula: Temp = (Vout - 1.25) / 0.005
 //          Vout = ADC * ADC_REFERENCE_VOLTAGE / 1023
-#define ADC_REFERENCE_VOLTAGE 2.7
+#define ADC_REFERENCE_VOLTAGE 3.0
 #define AD8495_OFFSET_VOLTAGE 1.25
 #define AD8495_MV_PER_C 0.005
 
