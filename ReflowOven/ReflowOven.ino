@@ -1792,6 +1792,32 @@ void setupWebServer() {
     }
     webServer.send(200, "application/json", "{\"success\":true}");
   });
+  webServer.on("/api/set_mode", HTTP_POST, []() {
+    if (webServer.hasArg("plain")) {
+      StaticJsonDocument<128> doc;
+      DeserializationError error = deserializeJson(doc, webServer.arg("plain"));
+      if (!error && doc.containsKey("mode")) {
+        String mode = doc["mode"].as<String>();
+        if (systemState == STATE_IDLE) {
+          if (mode == "reflow") {
+            operatingMode = MODE_REFLOW;
+            webServer.send(200, "application/json", "{\"success\":true,\"mode\":\"reflow\"}");
+          } else if (mode == "filament") {
+            operatingMode = MODE_FILAMENT;
+            webServer.send(200, "application/json", "{\"success\":true,\"mode\":\"filament\"}");
+          } else {
+            webServer.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid mode\"}");
+          }
+        } else {
+          webServer.send(400, "application/json", "{\"success\":false,\"error\":\"Cannot change mode while running\"}");
+        }
+      } else {
+        webServer.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid request\"}");
+      }
+    } else {
+      webServer.send(400, "application/json", "{\"success\":false,\"error\":\"No data\"}");
+    }
+  });
   webServer.on("/api/config", HTTP_GET, handleWebConfig);
   webServer.on("/api/config", HTTP_POST, []() {
     // Handle configuration updates
@@ -1854,6 +1880,8 @@ void setupWebServer() {
     doc["tempMax"] = FILAMENT_MAX_TEMP;
     doc["durationMin"] = FILAMENT_TIME_MIN;
     doc["durationMax"] = FILAMENT_TIME_MAX;
+    doc["mode"] = getModeString(operatingMode);
+    doc["state"] = (systemState == STATE_IDLE) ? "idle" : "running";
 
     String response;
     serializeJson(doc, response);
@@ -2206,8 +2234,16 @@ void handleWebFilament() {
            border-radius: 8px; font-size: 1em; cursor: pointer; margin-top: 10px; }
     .btn-save { background: #2ec4b6; color: white; }
     .btn-save:hover { background: #25a99d; }
+    .btn-mode { background: #e76f51; color: white; }
+    .btn-mode:hover { background: #d45a3c; }
+    .btn-mode.active { background: #2ec4b6; }
+    .btn-mode.active:hover { background: #25a99d; }
+    .btn-mode:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
     .btn-back { background: #3d5a80; color: white; text-align: center; text-decoration: none; display: block; }
     .btn-back:hover { background: #4a6d94; }
+    .select-row { display: flex; gap: 10px; align-items: flex-end; }
+    .select-row select { margin-bottom: 0; flex: 1; }
+    .select-row .btn { width: auto; padding: 12px 20px; margin-top: 0; white-space: nowrap; }
     .msg { padding: 15px; border-radius: 8px; margin-bottom: 15px; display: none; }
     .msg-success { background: #2ec4b6; display: block; }
     .msg-error { background: #c1121f; display: block; }
@@ -2224,6 +2260,7 @@ void handleWebFilament() {
     <div class="msg" id="msg"></div>
 
     <div class="current-values">
+      <div><span class="label">Current Mode:</span><span class="value" id="currentMode">--</span></div>
       <div><span class="label">Current Type:</span><span class="value" id="currentType">--</span></div>
       <div><span class="label">Current Temp:</span><span class="value" id="currentTemp">--C</span></div>
       <div><span class="label">Current Duration:</span><span class="value" id="currentDuration">-- hrs</span></div>
@@ -2232,14 +2269,17 @@ void handleWebFilament() {
     <div class="card">
       <h2>Filament Type Presets</h2>
       <label>Select Filament Type</label>
-      <select id="filamentType" onchange="selectType()">
-        <option value="0">Custom</option>
-        <option value="1">PLA (45C, 4 hrs)</option>
-        <option value="2">PETG (65C, 4 hrs)</option>
-        <option value="3">ABS (70C, 4 hrs)</option>
-        <option value="4">Nylon (80C, 6 hrs)</option>
-        <option value="5">TPU (50C, 4 hrs)</option>
-      </select>
+      <div class="select-row">
+        <select id="filamentType" onchange="selectType()">
+          <option value="0">Custom</option>
+          <option value="1">PLA (45C, 4 hrs)</option>
+          <option value="2">PETG (65C, 4 hrs)</option>
+          <option value="3">ABS (70C, 4 hrs)</option>
+          <option value="4">Nylon (80C, 6 hrs)</option>
+          <option value="5">TPU (50C, 4 hrs)</option>
+        </select>
+        <button class="btn btn-mode" id="setModeBtn" onclick="setMode()">Set Mode</button>
+      </div>
     </div>
 
     <div class="card">
@@ -2269,7 +2309,64 @@ void handleWebFilament() {
           document.getElementById('currentType').textContent = data.typeName;
           document.getElementById('currentTemp').textContent = data.temp + 'C';
           document.getElementById('currentDuration').textContent = (data.duration / 60).toFixed(1) + ' hrs';
+          document.getElementById('currentMode').textContent = data.mode;
+          const btn = document.getElementById('setModeBtn');
+          if (data.mode === 'Filament') {
+            btn.textContent = 'Mode Set';
+            btn.classList.add('active');
+          } else {
+            btn.textContent = 'Set Mode';
+            btn.classList.remove('active');
+          }
+          btn.disabled = (data.state !== 'idle');
         });
+    }
+
+    function setMode() {
+      const type = parseInt(document.getElementById('filamentType').value);
+      const temp = parseInt(document.getElementById('temp').value);
+      const duration = parseInt(document.getElementById('duration').value);
+
+      const data = { temp, duration };
+      if (type > 0) {
+        data.type = type;
+      }
+
+      // First save settings, then set mode
+      fetch('/api/filament', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(r => r.json())
+      .then(result => {
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to save settings');
+        }
+        return fetch('/api/set_mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'filament' })
+        });
+      })
+      .then(r => r.json())
+      .then(result => {
+        const msg = document.getElementById('msg');
+        if (result.success) {
+          msg.textContent = 'Settings saved & mode set! Ready to start from control panel.';
+          msg.className = 'msg msg-success';
+          loadSettings();
+          setTimeout(() => { msg.className = 'msg'; }, 3000);
+        } else {
+          msg.textContent = 'Error: ' + (result.error || 'Unknown error');
+          msg.className = 'msg msg-error';
+        }
+      })
+      .catch(err => {
+        const msg = document.getElementById('msg');
+        msg.textContent = 'Error: ' + err.message;
+        msg.className = 'msg msg-error';
+      });
     }
 
     function selectType() {
