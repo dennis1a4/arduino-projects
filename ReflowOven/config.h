@@ -56,8 +56,8 @@
 // Temperature Limits
 // ===========================================
 #define REFLOW_MAX_TEMP 260       // Hardware cutoff for reflow mode
-#define FILAMENT_MAX_TEMP 95      // Hardware cutoff for filament mode
-#define TEMP_CALIB_OFFSET 0.0     // Calibration offset in degrees C
+#define FILAMENT_MAX_TEMP 100     // Hardware cutoff for filament mode
+#define TEMP_CALIB_OFFSET -30.0   // Calibration offset in degrees C
 
 // AD8495 Temperature Conversion (Adafruit board)
 // Output: 5mV/°C with 1.25V reference at 0°C
@@ -101,28 +101,29 @@
 // Safety Timeouts
 // ===========================================
 #define REFLOW_TIMEOUT 600        // 10 minutes in seconds
-#define FILAMENT_TIMEOUT 43200    // 12 hours in seconds
+#define FILAMENT_TIMEOUT 86400    // 24 hours in seconds
 
 // Thermal Runaway Detection
 #define THERMAL_RUNAWAY_TEMP_RISE 5   // Max °C rise when heater off
 #define THERMAL_RUNAWAY_TIME 30000    // Detection window in ms
 
 // ===========================================
-// Reflow Profile Defaults
+// Reflow Profile Defaults (Leaded Solder - Sn63/Pb37)
+// Melting point: 183°C
 // ===========================================
-#define REFLOW_PREHEAT_TEMP 150
-#define REFLOW_SOAK_TEMP_MIN 150
-#define REFLOW_SOAK_TEMP_MAX 180
+#define REFLOW_PREHEAT_TEMP 130
+#define REFLOW_SOAK_TEMP_MIN 130
+#define REFLOW_SOAK_TEMP_MAX 160
 #define REFLOW_SOAK_DURATION 90       // seconds
-#define REFLOW_PEAK_TEMP 240
+#define REFLOW_PEAK_TEMP 210
 #define REFLOW_PEAK_DURATION 45       // seconds
-#define REFLOW_COOLING_TEMP 100
+#define REFLOW_COOLING_TEMP 80
 
-// Reflow configurable ranges
-#define REFLOW_PEAK_TEMP_MIN 220
-#define REFLOW_PEAK_TEMP_MAX 250
-#define REFLOW_SOAK_TEMP_CONFIG_MIN 140
-#define REFLOW_SOAK_TEMP_CONFIG_MAX 180
+// Reflow configurable ranges (leaded solder)
+#define REFLOW_PEAK_TEMP_MIN 195
+#define REFLOW_PEAK_TEMP_MAX 230
+#define REFLOW_SOAK_TEMP_CONFIG_MIN 120
+#define REFLOW_SOAK_TEMP_CONFIG_MAX 170
 #define REFLOW_SOAK_DURATION_MIN 60
 #define REFLOW_SOAK_DURATION_MAX 120
 
@@ -151,9 +152,9 @@
 
 // Filament configurable ranges
 #define FILAMENT_TEMP_MIN 40
-#define FILAMENT_TEMP_MAX 90
+#define FILAMENT_TEMP_MAX 100
 #define FILAMENT_TIME_MIN 60      // 1 hour in minutes
-#define FILAMENT_TIME_MAX 720     // 12 hours in minutes
+#define FILAMENT_TIME_MAX 1440    // 24 hours in minutes
 
 // ===========================================
 // Display Configuration
@@ -166,7 +167,7 @@
 // ===========================================
 // User Interface Timing
 // ===========================================
-#define BUTTON_DEBOUNCE_TIME 50       // ms
+#define BUTTON_DEBOUNCE_TIME 150      // ms
 #define BUTTON_LONG_PRESS_TIME 2000   // 2 seconds for menu back
 #define BUTTON_START_PRESS_TIME 5000  // 5 seconds for start/stop
 #define ENCODER_ACCEL_THRESHOLD 50    // ms between clicks for acceleration
