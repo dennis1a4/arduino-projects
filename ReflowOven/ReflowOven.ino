@@ -1491,6 +1491,7 @@ void startAPMode() {
 // ===========================================
 
 void setupMQTT() {
+  mqttClient.setBufferSize(1024);  // Increase buffer for discovery payload
   mqttClient.setServer(mqttBroker.c_str(), mqttPort);
   mqttClient.setCallback(mqttCallback);
 }
