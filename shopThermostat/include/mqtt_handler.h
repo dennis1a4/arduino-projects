@@ -284,9 +284,9 @@ public:
         StaticJsonDocument<768> doc;
 
         String uniqueId = String("shop_thermo_") + sensor + "_" + _deviceId;
-        String stateTopic = _baseTopic + "/" + String(sensor).replace("_", "/");
+        String stateTopic;
 
-        // Fix topic names
+        // Build topic based on sensor name
         if (strcmp(sensor, "water_inlet") == 0) {
             stateTopic = _baseTopic + "/water/inlet";
         } else if (strcmp(sensor, "water_outlet") == 0) {
@@ -325,7 +325,10 @@ public:
         StaticJsonDocument<512> doc;
 
         String uniqueId = String("shop_thermo_") + sensor + "_" + _deviceId;
-        String stateTopic = _baseTopic + "/" + String(sensor).replace("_relay", "/relay");
+        // Build topic: floor_relay -> floor/relay, air_relay -> air/relay
+        String sensorStr = String(sensor);
+        sensorStr.replace("_relay", "/relay");
+        String stateTopic = _baseTopic + "/" + sensorStr;
 
         doc["name"] = String("Shop ") + name;
         doc["unique_id"] = uniqueId;

@@ -1,6 +1,21 @@
 #ifndef WEBSERVER_H
 #define WEBSERVER_H
 
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
+
+// Define HTTP method constants if not defined
+#ifndef HTTP_GET
+#define HTTP_GET    0b00000001
+#define HTTP_POST   0b00000010
+#define HTTP_DELETE 0b00000100
+#define HTTP_PUT    0b00001000
+#define HTTP_PATCH  0b00010000
+#define HTTP_HEAD   0b00100000
+#define HTTP_OPTIONS 0b01000000
+#define HTTP_ANY    0b01111111
+#endif
+
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include "config.h"
@@ -189,13 +204,19 @@ public:
 
         // Temperatures
         JsonObject temps = doc.createNestedObject("temperatures");
-        temps["floor"] = readings.valid[SENSOR_FLOOR] ? readings.floor : (JsonVariant)nullptr;
-        temps["air"] = readings.valid[SENSOR_AIR] ? readings.air : (JsonVariant)nullptr;
-        temps["outdoor"] = readings.valid[SENSOR_OUTDOOR] ? readings.outdoor : (JsonVariant)nullptr;
-        temps["water_in"] = readings.valid[SENSOR_WATER_IN] ? readings.waterIn : (JsonVariant)nullptr;
-        temps["water_out"] = readings.valid[SENSOR_WATER_OUT] ? readings.waterOut : (JsonVariant)nullptr;
-        temps["water_delta"] = (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT]) ?
-                               readings.waterDelta : (JsonVariant)nullptr;
+        if (readings.valid[SENSOR_FLOOR]) temps["floor"] = readings.floor;
+        else temps["floor"] = (char*)NULL;
+        if (readings.valid[SENSOR_AIR]) temps["air"] = readings.air;
+        else temps["air"] = (char*)NULL;
+        if (readings.valid[SENSOR_OUTDOOR]) temps["outdoor"] = readings.outdoor;
+        else temps["outdoor"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_IN]) temps["water_in"] = readings.waterIn;
+        else temps["water_in"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_OUT]) temps["water_out"] = readings.waterOut;
+        else temps["water_out"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT])
+            temps["water_delta"] = readings.waterDelta;
+        else temps["water_delta"] = (char*)NULL;
 
         // Zones
         JsonObject zones = doc.createNestedObject("zones");
@@ -242,13 +263,19 @@ public:
 
         const TemperatureManager::Readings& readings = _temps->getReadings();
 
-        doc["floor"] = readings.valid[SENSOR_FLOOR] ? readings.floor : (JsonVariant)nullptr;
-        doc["air"] = readings.valid[SENSOR_AIR] ? readings.air : (JsonVariant)nullptr;
-        doc["outdoor"] = readings.valid[SENSOR_OUTDOOR] ? readings.outdoor : (JsonVariant)nullptr;
-        doc["water_inlet"] = readings.valid[SENSOR_WATER_IN] ? readings.waterIn : (JsonVariant)nullptr;
-        doc["water_outlet"] = readings.valid[SENSOR_WATER_OUT] ? readings.waterOut : (JsonVariant)nullptr;
-        doc["water_delta"] = (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT]) ?
-                             readings.waterDelta : (JsonVariant)nullptr;
+        if (readings.valid[SENSOR_FLOOR]) doc["floor"] = readings.floor;
+        else doc["floor"] = (char*)NULL;
+        if (readings.valid[SENSOR_AIR]) doc["air"] = readings.air;
+        else doc["air"] = (char*)NULL;
+        if (readings.valid[SENSOR_OUTDOOR]) doc["outdoor"] = readings.outdoor;
+        else doc["outdoor"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_IN]) doc["water_inlet"] = readings.waterIn;
+        else doc["water_inlet"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_OUT]) doc["water_outlet"] = readings.waterOut;
+        else doc["water_outlet"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT])
+            doc["water_delta"] = readings.waterDelta;
+        else doc["water_delta"] = (char*)NULL;
         doc["timestamp"] = millis();
 
         String response;
@@ -261,10 +288,13 @@ public:
 
         const TemperatureManager::Readings& readings = _temps->getReadings();
 
-        doc["inlet_temp"] = readings.valid[SENSOR_WATER_IN] ? readings.waterIn : (JsonVariant)nullptr;
-        doc["outlet_temp"] = readings.valid[SENSOR_WATER_OUT] ? readings.waterOut : (JsonVariant)nullptr;
-        doc["delta_t"] = (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT]) ?
-                         readings.waterDelta : (JsonVariant)nullptr;
+        if (readings.valid[SENSOR_WATER_IN]) doc["inlet_temp"] = readings.waterIn;
+        else doc["inlet_temp"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_OUT]) doc["outlet_temp"] = readings.waterOut;
+        else doc["outlet_temp"] = (char*)NULL;
+        if (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT])
+            doc["delta_t"] = readings.waterDelta;
+        else doc["delta_t"] = (char*)NULL;
         doc["flow_status"] = TemperatureManager::getFlowStatusString(_temps->getFlowStatus());
         doc["pump_runtime_today"] = _controller->getRuntime(ZONE_FLOOR);
         doc["enabled"] = _config->water.enabled;
