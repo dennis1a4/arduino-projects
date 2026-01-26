@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shop Thermostat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; padding: 10px; }
+        header {
+            background: #16213e;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 2px solid #0f3460;
+        }
+        header h1 { font-size: 1.4em; color: #e94560; }
+        nav {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 5px;
+            padding: 10px;
+            background: #16213e;
+        }
+        nav button {
+            background: #0f3460;
+            border: none;
+            color: #eee;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        nav button.active { background: #e94560; }
+        nav button:hover { background: #533483; }
+        .page { display: none; padding: 15px 0; }
+        .page.active { display: block; }
+        .card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .card h2 {
+            font-size: 1.1em;
+            color: #e94560;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #0f3460;
+            padding-bottom: 8px;
+        }
+        .temp-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        .temp-item {
+            background: #0f3460;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .temp-item label { display: block; font-size: 0.8em; color: #aaa; margin-bottom: 5px; }
+        .temp-item .value { font-size: 1.5em; font-weight: bold; color: #4ecca3; }
+        .temp-item .value.error { color: #e94560; }
+        .zone-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+        .zone-control:last-child { border-bottom: none; }
+        .zone-info { flex: 1; }
+        .zone-info h3 { font-size: 1em; margin-bottom: 5px; }
+        .zone-info .status { font-size: 0.85em; color: #aaa; }
+        .zone-info .status.heating { color: #e94560; }
+        .zone-controls { display: flex; gap: 8px; align-items: center; }
+        .btn {
+            background: #0f3460;
+            border: none;
+            color: #eee;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn:hover { background: #533483; }
+        .btn.primary { background: #e94560; }
+        .btn.success { background: #4ecca3; color: #1a1a2e; }
+        .btn.small { padding: 5px 10px; font-size: 0.85em; }
+        input[type="number"], input[type="text"], input[type="password"], select {
+            background: #0f3460;
+            border: 1px solid #533483;
+            color: #eee;
+            padding: 8px 12px;
+            border-radius: 5px;
+            width: 100%;
+        }
+        input[type="number"] { width: 80px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.9em; }
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .form-row .form-group { flex: 1; min-width: 150px; }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .status-badge.ok { background: #4ecca3; color: #1a1a2e; }
+        .status-badge.warning { background: #f39c12; color: #1a1a2e; }
+        .status-badge.error { background: #e94560; color: #fff; }
+        .status-badge.off { background: #555; color: #aaa; }
+        .water-delta {
+            font-size: 2em;
+            text-align: center;
+            padding: 20px;
+            color: #4ecca3;
+        }
+        .schedule-item {
+            background: #0f3460;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .schedule-item.disabled { opacity: 0.5; }
+        .schedule-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .schedule-days { display: flex; gap: 5px; margin-top: 5px; }
+        .day-badge {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75em;
+            background: #1a1a2e;
+        }
+        .day-badge.active { background: #e94560; }
+        .wifi-network {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+        .wifi-network:hover { background: #533483; }
+        .system-info { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #0f3460; }
+        .system-info:last-child { border-bottom: none; }
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4ecca3;
+            color: #1a1a2e;
+            padding: 12px 24px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+        #toast.error { background: #e94560; color: #fff; }
+        .loading { opacity: 0.5; pointer-events: none; }
+        @media (max-width: 500px) {
+            .temp-grid { grid-template-columns: repeat(2, 1fr); }
+            nav button { padding: 6px 10px; font-size: 0.8em; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Shop Thermostat</h1>
+    </header>
+    <nav>
+        <button onclick="showPage('dashboard')" id="nav-dashboard" class="active">Dashboard</button>
+        <button onclick="showPage('settings')" id="nav-settings">Settings</button>
+        <button onclick="showPage('schedule')" id="nav-schedule">Schedule</button>
+        <button onclick="showPage('mqtt')" id="nav-mqtt">MQTT</button>
+        <button onclick="showPage('wifi')" id="nav-wifi">WiFi</button>
+        <button onclick="showPage('system')" id="nav-system">System</button>
+    </nav>
+    <div class="container">
+        <!-- Dashboard Page -->
+        <div id="dashboard" class="page active">
+            <div class="card">
+                <h2>Temperatures</h2>
+                <div class="temp-grid">
+                    <div class="temp-item">
+                        <label>Floor</label>
+                        <div class="value" id="temp-floor">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Air</label>
+                        <div class="value" id="temp-air">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Outdoor</label>
+                        <div class="value" id="temp-outdoor">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Target (F/A)</label>
+                        <div class="value" id="temp-targets">--/--</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Zone Control</h2>
+                <div class="zone-control">
+                    <div class="zone-info">
+                        <h3>Floor Heating (Pump)</h3>
+                        <div class="status" id="floor-status">--</div>
+                    </div>
+                    <div class="zone-controls">
+                        <button class="btn small" onclick="setOverride('floor','off')">OFF</button>
+                        <button class="btn small" onclick="setOverride('floor','auto')">AUTO</button>
+                        <button class="btn small" onclick="setOverride('floor','on')">ON</button>
+                    </div>
+                </div>
+                <div class="zone-control">
+                    <div class="zone-info">
+                        <h3>Air Heating (Heater)</h3>
+                        <div class="status" id="air-status">--</div>
+                    </div>
+                    <div class="zone-controls">
+                        <button class="btn small" onclick="setOverride('air','off')">OFF</button>
+                        <button class="btn small" onclick="setOverride('air','auto')">AUTO</button>
+                        <button class="btn small" onclick="setOverride('air','on')">ON</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Water Tank Monitoring</h2>
+                <div class="temp-grid">
+                    <div class="temp-item">
+                        <label>Inlet</label>
+                        <div class="value" id="water-in">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Outlet</label>
+                        <div class="value" id="water-out">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Delta-T</label>
+                        <div class="value" id="water-delta">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Flow Status</label>
+                        <div id="flow-status"><span class="status-badge off">--</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>System Status</h2>
+                <div class="temp-grid">
+                    <div class="temp-item">
+                        <label>WiFi</label>
+                        <div id="wifi-status"><span class="status-badge off">--</span></div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Schedule</label>
+                        <div id="schedule-status"><span class="status-badge off">--</span></div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Uptime</label>
+                        <div class="value" id="uptime" style="font-size:1em;">--</div>
+                    </div>
+                    <div class="temp-item">
+                        <label>Time</label>
+                        <div class="value" id="current-time" style="font-size:1em;">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="settings" class="page">
+            <div class="card">
+                <h2>Floor Zone (Frost Protection)</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Target Temperature</label>
+                        <input type="number" id="floor-target" min="2" max="15" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>Hysteresis</label>
+                        <input type="number" id="floor-hysteresis" min="0.5" max="5" step="0.5">
+                    </div>
+                </div>
+                <button class="btn primary" onclick="saveZone('floor')">Save Floor Settings</button>
+            </div>
+            <div class="card">
+                <h2>Air Zone (Comfort Heating)</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Target Temperature</label>
+                        <input type="number" id="air-target" min="10" max="25" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>Hysteresis</label>
+                        <input type="number" id="air-hysteresis" min="0.5" max="3" step="0.5">
+                    </div>
+                </div>
+                <button class="btn primary" onclick="saveZone('air')">Save Air Settings</button>
+            </div>
+            <div class="card">
+                <h2>Water Monitoring</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Low Delta-T Warning</label>
+                        <input type="number" id="water-low" min="0.5" max="5" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>High Delta-T Warning</label>
+                        <input type="number" id="water-high" min="5" max="20" step="0.5">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="smart-pump"> Enable Smart Pump Control
+                    </label>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Sensor Calibration</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Floor Offset</label>
+                        <input type="number" id="cal-floor" min="-5" max="5" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Air Offset</label>
+                        <input type="number" id="cal-air" min="-5" max="5" step="0.1">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Outdoor Offset</label>
+                        <input type="number" id="cal-outdoor" min="-5" max="5" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Water In Offset</label>
+                        <input type="number" id="cal-water-in" min="-5" max="5" step="0.1">
+                    </div>
+                </div>
+                <button class="btn primary" onclick="saveCalibration()">Save Calibration</button>
+            </div>
+        </div>
+
+        <!-- Schedule Page -->
+        <div id="schedule" class="page">
+            <div class="card">
+                <h2>Schedules</h2>
+                <div id="schedule-list"></div>
+                <button class="btn primary" onclick="addSchedule()">Add Schedule</button>
+            </div>
+        </div>
+
+        <!-- MQTT Page -->
+        <div id="mqtt" class="page">
+            <div class="card">
+                <h2>MQTT Configuration</h2>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="mqtt-enabled"> Enable MQTT
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Broker Address</label>
+                    <input type="text" id="mqtt-broker" placeholder="192.168.1.100">
+                </div>
+                <div class="form-group">
+                    <label>Port</label>
+                    <input type="number" id="mqtt-port" value="1883">
+                </div>
+                <div class="form-group">
+                    <label>Username (optional)</label>
+                    <input type="text" id="mqtt-user">
+                </div>
+                <div class="form-group">
+                    <label>Password (optional)</label>
+                    <input type="password" id="mqtt-pass">
+                </div>
+                <div class="form-group">
+                    <label>Base Topic</label>
+                    <input type="text" id="mqtt-topic" value="homeassistant/climate/shop_thermostat">
+                </div>
+                <button class="btn primary" onclick="saveMqtt()">Save MQTT Settings</button>
+            </div>
+        </div>
+
+        <!-- WiFi Page -->
+        <div id="wifi" class="page">
+            <div class="card">
+                <h2>WiFi Status</h2>
+                <div class="system-info">
+                    <span>SSID</span>
+                    <span id="wifi-ssid">--</span>
+                </div>
+                <div class="system-info">
+                    <span>IP Address</span>
+                    <span id="wifi-ip">--</span>
+                </div>
+                <div class="system-info">
+                    <span>Signal Strength</span>
+                    <span id="wifi-rssi">--</span>
+                </div>
+                <div class="system-info">
+                    <span>MAC Address</span>
+                    <span id="wifi-mac">--</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Connect to Network</h2>
+                <button class="btn" onclick="scanWifi()">Scan Networks</button>
+                <div id="wifi-networks" style="margin-top:10px;"></div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>SSID</label>
+                    <input type="text" id="wifi-new-ssid">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="wifi-new-pass">
+                </div>
+                <button class="btn primary" onclick="connectWifi()">Connect</button>
+            </div>
+        </div>
+
+        <!-- System Page -->
+        <div id="system" class="page">
+            <div class="card">
+                <h2>System Information</h2>
+                <div class="system-info">
+                    <span>Firmware Version</span>
+                    <span id="sys-firmware">--</span>
+                </div>
+                <div class="system-info">
+                    <span>Chip ID</span>
+                    <span id="sys-chip">--</span>
+                </div>
+                <div class="system-info">
+                    <span>Free Memory</span>
+                    <span id="sys-heap">--</span>
+                </div>
+                <div class="system-info">
+                    <span>Uptime</span>
+                    <span id="sys-uptime">--</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Device Settings</h2>
+                <div class="form-group">
+                    <label>Device Name</label>
+                    <input type="text" id="sys-name">
+                </div>
+                <div class="form-group">
+                    <label>Temperature Unit</label>
+                    <select id="sys-unit">
+                        <option value="C">Celsius</option>
+                        <option value="F">Fahrenheit</option>
+                    </select>
+                </div>
+                <button class="btn primary" onclick="saveSystem()">Save Settings</button>
+            </div>
+            <div class="card">
+                <h2>Actions</h2>
+                <button class="btn" onclick="saveConfig()">Save All Configuration</button>
+                <button class="btn" onclick="reboot()" style="margin-left:10px;background:#e94560;">Reboot</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        let refreshTimer;
+
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById(page).classList.add('active');
+            document.getElementById('nav-' + page).classList.add('active');
+
+            if (page === 'dashboard') startRefresh();
+            else stopRefresh();
+
+            if (page === 'settings') loadConfig();
+            if (page === 'schedule') loadSchedules();
+            if (page === 'mqtt') loadMqtt();
+            if (page === 'wifi') loadWifi();
+            if (page === 'system') loadSystem();
+        }
+
+        function startRefresh() {
+            refreshStatus();
+            refreshTimer = setInterval(refreshStatus, 5000);
+        }
+
+        function stopRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+        }
+
+        async function refreshStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                // Temperatures
+                const unit = data.system.temp_unit;
+                setTemp('temp-floor', data.temperatures.floor, unit);
+                setTemp('temp-air', data.temperatures.air, unit);
+                setTemp('temp-outdoor', data.temperatures.outdoor, unit);
+                document.getElementById('temp-targets').textContent =
+                    `${data.zones.floor.target}/${data.zones.air.target}`;
+
+                // Zones
+                updateZoneStatus('floor', data.zones.floor);
+                updateZoneStatus('air', data.zones.air);
+
+                // Water
+                setTemp('water-in', data.temperatures.water_in, unit);
+                setTemp('water-out', data.temperatures.water_out, unit);
+                setTemp('water-delta', data.temperatures.water_delta, unit, true);
+                updateFlowStatus(data.water.flow_status);
+
+                // System
+                document.getElementById('wifi-status').innerHTML =
+                    `<span class="status-badge ${data.system.wifi ? 'ok' : 'error'}">${data.system.wifi ? 'Connected' : 'Disconnected'}</span>`;
+                document.getElementById('schedule-status').innerHTML =
+                    `<span class="status-badge ${data.system.schedule_active ? 'ok' : 'off'}">${data.system.schedule_active ? 'Active' : 'Off'}</span>`;
+                document.getElementById('uptime').textContent = formatUptime(data.system.uptime);
+                document.getElementById('current-time').textContent = data.system.time;
+            } catch (e) {
+                console.error('Refresh error:', e);
+            }
+        }
+
+        function setTemp(id, value, unit, isDelta = false) {
+            const el = document.getElementById(id);
+            if (value === null || value === undefined) {
+                el.textContent = '--';
+                el.classList.add('error');
+            } else {
+                el.textContent = value.toFixed(1) + (isDelta ? '' : '\u00B0') + unit;
+                el.classList.remove('error');
+            }
+        }
+
+        function updateZoneStatus(zone, data) {
+            const el = document.getElementById(zone + '-status');
+            let status = data.status;
+            let cls = '';
+            if (data.relay) cls = 'heating';
+            el.textContent = `Status: ${status} | Relay: ${data.relay ? 'ON' : 'OFF'}`;
+            el.className = 'status ' + cls;
+        }
+
+        function updateFlowStatus(status) {
+            const el = document.getElementById('flow-status');
+            let cls = 'off';
+            if (status === 'OK') cls = 'ok';
+            else if (status === 'WARNING') cls = 'warning';
+            else if (status === 'CRITICAL' || status === 'ERROR') cls = 'error';
+            el.innerHTML = `<span class="status-badge ${cls}">${status}</span>`;
+        }
+
+        function formatUptime(seconds) {
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (d > 0) return `${d}d ${h}h`;
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
+        async function setOverride(zone, mode) {
+            try {
+                await fetch('/api/override', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zone, mode})
+                });
+                toast('Override set');
+                refreshStatus();
+            } catch (e) {
+                toast('Error setting override', true);
+            }
+        }
+
+        async function loadConfig() {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+
+            document.getElementById('floor-target').value = data.zones.floor.target;
+            document.getElementById('floor-hysteresis').value = data.zones.floor.hysteresis;
+            document.getElementById('air-target').value = data.zones.air.target;
+            document.getElementById('air-hysteresis').value = data.zones.air.hysteresis;
+            document.getElementById('water-low').value = data.water.delta_t_warning_low;
+            document.getElementById('water-high').value = data.water.delta_t_warning_high;
+            document.getElementById('smart-pump').checked = data.water.smart_pump_control;
+            document.getElementById('cal-floor').value = data.sensors.floor.calibration;
+            document.getElementById('cal-air').value = data.sensors.air.calibration;
+            document.getElementById('cal-outdoor').value = data.sensors.outdoor.calibration;
+            document.getElementById('cal-water-in').value = data.sensors.water_in.calibration;
+        }
+
+        async function saveZone(zone) {
+            const target = parseFloat(document.getElementById(zone + '-target').value);
+            const hysteresis = parseFloat(document.getElementById(zone + '-hysteresis').value);
+
+            await fetch('/api/zone', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({zone, target, hysteresis})
+            });
+            toast('Settings saved');
+        }
+
+        async function saveCalibration() {
+            const data = {
+                floor: {calibration: parseFloat(document.getElementById('cal-floor').value)},
+                air: {calibration: parseFloat(document.getElementById('cal-air').value)},
+                outdoor: {calibration: parseFloat(document.getElementById('cal-outdoor').value)},
+                water_in: {calibration: parseFloat(document.getElementById('cal-water-in').value)}
+            };
+            await fetch('/api/sensors', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            toast('Calibration saved');
+        }
+
+        async function loadSchedules() {
+            const res = await fetch('/api/schedules');
+            const data = await res.json();
+
+            const container = document.getElementById('schedule-list');
+            container.innerHTML = '';
+
+            const days = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+            data.schedules.forEach((s, i) => {
+                if (!s.enabled && s.days.length === 0) return;
+
+                const div = document.createElement('div');
+                div.className = 'schedule-item' + (s.enabled ? '' : ' disabled');
+                div.innerHTML = `
+                    <div class="schedule-header">
+                        <span>${s.zone.toUpperCase()} - ${s.target_temp}\u00B0</span>
+                        <span>${s.start_time} - ${s.end_time}</span>
+                    </div>
+                    <div class="schedule-days">
+                        ${days.map((d,di) => `<span class="day-badge ${s.days.includes(di)?'active':''}">${d}</span>`).join('')}
+                    </div>
+                    <div style="margin-top:10px;">
+                        <button class="btn small" onclick="editSchedule(${i})">Edit</button>
+                        <button class="btn small" onclick="deleteSchedule(${i})">Delete</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addSchedule() {
+            toast('Schedule editor coming soon');
+        }
+
+        function editSchedule(index) {
+            toast('Schedule editor coming soon');
+        }
+
+        async function deleteSchedule(index) {
+            if (!confirm('Delete this schedule?')) return;
+            await fetch('/api/schedule/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({index})
+            });
+            loadSchedules();
+            toast('Schedule deleted');
+        }
+
+        async function loadMqtt() {
+            const res = await fetch('/api/mqtt');
+            const data = await res.json();
+
+            document.getElementById('mqtt-enabled').checked = data.enabled;
+            document.getElementById('mqtt-broker').value = data.broker;
+            document.getElementById('mqtt-port').value = data.port;
+            document.getElementById('mqtt-user').value = data.username;
+            document.getElementById('mqtt-topic').value = data.base_topic;
+        }
+
+        async function saveMqtt() {
+            const data = {
+                enabled: document.getElementById('mqtt-enabled').checked,
+                broker: document.getElementById('mqtt-broker').value,
+                port: parseInt(document.getElementById('mqtt-port').value),
+                username: document.getElementById('mqtt-user').value,
+                password: document.getElementById('mqtt-pass').value,
+                base_topic: document.getElementById('mqtt-topic').value
+            };
+            await fetch('/api/mqtt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            toast('MQTT settings saved');
+        }
+
+        async function loadWifi() {
+            const res = await fetch('/api/wifi');
+            const data = await res.json();
+
+            document.getElementById('wifi-ssid').textContent = data.ssid || '--';
+            document.getElementById('wifi-ip').textContent = data.ip || '--';
+            document.getElementById('wifi-rssi').textContent = data.rssi ? data.rssi + ' dBm' : '--';
+            document.getElementById('wifi-mac').textContent = data.mac || '--';
+        }
+
+        async function scanWifi() {
+            document.getElementById('wifi-networks').innerHTML = 'Scanning...';
+            const res = await fetch('/api/wifi/scan');
+            const data = await res.json();
+
+            const container = document.getElementById('wifi-networks');
+            container.innerHTML = '';
+
+            data.networks.forEach(n => {
+                const div = document.createElement('div');
+                div.className = 'wifi-network';
+                div.innerHTML = `<span>${n.ssid}</span><span>${n.rssi} dBm</span>`;
+                div.onclick = () => {
+                    document.getElementById('wifi-new-ssid').value = n.ssid;
+                };
+                container.appendChild(div);
+            });
+        }
+
+        async function connectWifi() {
+            const ssid = document.getElementById('wifi-new-ssid').value;
+            const password = document.getElementById('wifi-new-pass').value;
+
+            if (!ssid) {
+                toast('Enter SSID', true);
+                return;
+            }
+
+            await fetch('/api/wifi', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid, password})
+            });
+            toast('Connecting to WiFi...');
+        }
+
+        async function loadSystem() {
+            const res = await fetch('/api/system');
+            const data = await res.json();
+
+            document.getElementById('sys-firmware').textContent = data.firmware;
+            document.getElementById('sys-chip').textContent = data.chip_id;
+            document.getElementById('sys-heap').textContent = data.free_heap + ' bytes';
+            document.getElementById('sys-uptime').textContent = formatUptime(data.uptime || 0);
+            document.getElementById('sys-name').value = data.device_name;
+            document.getElementById('sys-unit').value = data.temp_unit;
+        }
+
+        async function saveSystem() {
+            const data = {
+                device_name: document.getElementById('sys-name').value,
+                temp_unit: document.getElementById('sys-unit').value
+            };
+            await fetch('/api/system', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            toast('System settings saved');
+        }
+
+        async function saveConfig() {
+            await fetch('/api/save', {method: 'POST'});
+            toast('Configuration saved to flash');
+        }
+
+        async function reboot() {
+            if (!confirm('Reboot the device?')) return;
+            await fetch('/api/reboot', {method: 'POST'});
+            toast('Rebooting...');
+        }
+
+        function toast(msg, isError = false) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = isError ? 'error' : '';
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
+        }
+
+        // Start on dashboard
+        startRefresh();
+    </script>
+</body>
+</html>
