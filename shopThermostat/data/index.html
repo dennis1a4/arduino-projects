@@ -169,6 +169,54 @@
         }
         #toast.error { background: #e94560; color: #fff; }
         .loading { opacity: 0.5; pointer-events: none; }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 900;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            width: 90%;
+            max-width: 450px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h2 { font-size: 1.1em; color: #e94560; margin-bottom: 15px; }
+        .days-selector { display: flex; gap: 5px; flex-wrap: wrap; }
+        .days-selector .day-toggle {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #533483;
+            background: #1a1a2e;
+            color: #aaa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .days-selector .day-toggle.active {
+            background: #e94560;
+            border-color: #e94560;
+            color: #fff;
+        }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .modal-buttons .btn { flex: 1; text-align: center; }
+        input[type="time"] {
+            background: #0f3460;
+            border: 1px solid #533483;
+            color: #eee;
+            padding: 8px 12px;
+            border-radius: 5px;
+        }
         @media (max-width: 500px) {
             .temp-grid { grid-template-columns: repeat(2, 1fr); }
             nav button { padding: 6px 10px; font-size: 0.8em; }
@@ -476,6 +524,54 @@
             </div>
         </div>
     </div>
+    <div class="modal-overlay" id="schedule-modal">
+        <div class="modal">
+            <h2 id="modal-title">Add Schedule</h2>
+            <input type="hidden" id="sched-index">
+            <div class="form-group">
+                <label>Zone</label>
+                <select id="sched-zone">
+                    <option value="floor">Floor</option>
+                    <option value="air">Air</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Target Temperature</label>
+                <input type="number" id="sched-temp" min="2" max="30" step="0.5" value="18">
+            </div>
+            <div class="form-group">
+                <label>Days</label>
+                <div class="days-selector" id="sched-days">
+                    <div class="day-toggle" data-day="0" onclick="toggleDay(this)">Su</div>
+                    <div class="day-toggle" data-day="1" onclick="toggleDay(this)">Mo</div>
+                    <div class="day-toggle" data-day="2" onclick="toggleDay(this)">Tu</div>
+                    <div class="day-toggle" data-day="3" onclick="toggleDay(this)">We</div>
+                    <div class="day-toggle" data-day="4" onclick="toggleDay(this)">Th</div>
+                    <div class="day-toggle" data-day="5" onclick="toggleDay(this)">Fr</div>
+                    <div class="day-toggle" data-day="6" onclick="toggleDay(this)">Sa</div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Start Time</label>
+                    <input type="time" id="sched-start" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label>End Time</label>
+                    <input type="time" id="sched-end" value="17:00">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="sched-enabled" checked> Enabled
+                </label>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn primary" onclick="saveSchedule()">Save</button>
+                <button class="btn" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
     <div id="toast"></div>
 
     <script>
@@ -641,6 +737,7 @@
             const res = await fetch('/api/schedules');
             const data = await res.json();
 
+            schedulesCache = data.schedules;
             const container = document.getElementById('schedule-list');
             container.innerHTML = '';
 
@@ -668,12 +765,85 @@
             });
         }
 
+        let schedulesCache = [];
+
         function addSchedule() {
-            toast('Schedule editor coming soon');
+            // Find first unused slot
+            let idx = schedulesCache.findIndex(s => !s.enabled && s.days.length === 0);
+            if (idx === -1) {
+                if (schedulesCache.length >= 7) {
+                    toast('All 7 schedule slots are in use', true);
+                    return;
+                }
+                idx = schedulesCache.length;
+            }
+            document.getElementById('modal-title').textContent = 'Add Schedule';
+            document.getElementById('sched-index').value = idx;
+            document.getElementById('sched-zone').value = 'floor';
+            document.getElementById('sched-temp').value = '18';
+            document.getElementById('sched-start').value = '08:00';
+            document.getElementById('sched-end').value = '17:00';
+            document.getElementById('sched-enabled').checked = true;
+            // Default weekdays selected
+            document.querySelectorAll('#sched-days .day-toggle').forEach(el => {
+                const d = parseInt(el.dataset.day);
+                el.classList.toggle('active', d >= 1 && d <= 5);
+            });
+            document.getElementById('schedule-modal').classList.add('active');
         }
 
         function editSchedule(index) {
-            toast('Schedule editor coming soon');
+            const s = schedulesCache[index];
+            if (!s) return;
+            document.getElementById('modal-title').textContent = 'Edit Schedule';
+            document.getElementById('sched-index').value = index;
+            document.getElementById('sched-zone').value = s.zone;
+            document.getElementById('sched-temp').value = s.target_temp;
+            document.getElementById('sched-start').value = s.start_time;
+            document.getElementById('sched-end').value = s.end_time;
+            document.getElementById('sched-enabled').checked = s.enabled;
+            document.querySelectorAll('#sched-days .day-toggle').forEach(el => {
+                const d = parseInt(el.dataset.day);
+                el.classList.toggle('active', s.days.includes(d));
+            });
+            document.getElementById('schedule-modal').classList.add('active');
+        }
+
+        function toggleDay(el) {
+            el.classList.toggle('active');
+        }
+
+        function closeModal() {
+            document.getElementById('schedule-modal').classList.remove('active');
+        }
+
+        async function saveSchedule() {
+            const days = [];
+            document.querySelectorAll('#sched-days .day-toggle.active').forEach(el => {
+                days.push(parseInt(el.dataset.day));
+            });
+            const payload = {
+                index: parseInt(document.getElementById('sched-index').value),
+                enabled: document.getElementById('sched-enabled').checked,
+                zone: document.getElementById('sched-zone').value,
+                target_temp: parseFloat(document.getElementById('sched-temp').value),
+                days: days,
+                start_time: document.getElementById('sched-start').value,
+                end_time: document.getElementById('sched-end').value
+            };
+            try {
+                await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                await fetch('/api/save', {method: 'POST'});
+                closeModal();
+                loadSchedules();
+                toast('Schedule saved');
+            } catch (e) {
+                toast('Error saving schedule', true);
+            }
         }
 
         async function deleteSchedule(index) {
