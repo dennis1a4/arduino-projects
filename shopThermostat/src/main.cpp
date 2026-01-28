@@ -233,6 +233,9 @@ void loop() {
     // Handle encoder events
     handleEncoderEvents();
 
+    // Handle pending WiFi connection (scheduled from web interface)
+    wifi.handlePendingConnect();
+
     // Update WiFi connection
     wifi.update();
     wifiConnected = wifi.isConnected();

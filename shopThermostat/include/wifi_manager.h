@@ -22,7 +22,7 @@ public:
 private:
     ConfigManager* _config;
     ConnectionState _state;
-    DNSServer _dnsServer;
+    DNSServer* _dnsServer;
     bool _apMode;
     unsigned long _apStartTime;
     unsigned long _lastConnectAttempt;
@@ -30,22 +30,35 @@ private:
     String _ipAddress;
     int _rssi;
     String _apSSID;
+    bool _scanInProgress;
+    bool _pendingConnect;
+    char _pendingSSID[33];
+    char _pendingPassword[65];
 
 public:
     WiFiConnectionManager(ConfigManager* config)
         : _config(config),
           _state(WIFI_STATE_DISCONNECTED),
+          _dnsServer(nullptr),
           _apMode(false),
           _apStartTime(0),
           _lastConnectAttempt(0),
           _connectTimeout(60000),
-          _rssi(0) {
-        // Generate AP SSID with chip ID
-        _apSSID = "ShopThermostat-" + String(ESP.getChipId(), HEX);
-        _apSSID.toUpperCase();
+          _rssi(0),
+          _scanInProgress(false),
+          _pendingConnect(false) {
+        _pendingSSID[0] = '\0';
+        _pendingPassword[0] = '\0';
     }
 
     void begin() {
+        // Create DNS server instance (deferred to avoid global construction issues)
+        _dnsServer = new DNSServer();
+
+        // Generate AP SSID with chip ID (must be done at runtime)
+        _apSSID = "ShopThermostat-" + String(ESP.getChipId(), HEX);
+        _apSSID.toUpperCase();
+
         WiFi.mode(WIFI_STA);
         WiFi.setAutoReconnect(true);
 
@@ -63,7 +76,7 @@ public:
 
     void update() {
         if (_apMode) {
-            _dnsServer.processNextRequest();
+            _dnsServer->processNextRequest();
 
             // Check AP timeout
             if (millis() - _apStartTime > AP_TIMEOUT_MS) {
@@ -128,7 +141,7 @@ public:
         WiFi.softAP(_apSSID.c_str(), DEFAULT_AP_PASSWORD);
 
         // Start DNS server for captive portal
-        _dnsServer.start(53, "*", WiFi.softAPIP());
+        _dnsServer->start(53, "*", WiFi.softAPIP());
 
         _apMode = true;
         _state = WIFI_STATE_AP_MODE;
@@ -144,7 +157,7 @@ public:
     void stopAPMode() {
         Serial.println(F("Stopping AP mode..."));
 
-        _dnsServer.stop();
+        _dnsServer->stop();
         WiFi.softAPdisconnect(true);
         WiFi.mode(WIFI_STA);
 
@@ -196,19 +209,55 @@ public:
         return false;
     }
 
-    // Scan for available networks
-    int scanNetworks(String* ssids, int* rssis, int maxNetworks) {
-        int n = WiFi.scanNetworks();
-        int count = min(n, maxNetworks);
+    // Start async WiFi scan
+    void startScan() {
+        if (_scanInProgress) return;
 
-        for (int i = 0; i < count; i++) {
-            ssids[i] = WiFi.SSID(i);
-            rssis[i] = WiFi.RSSI(i);
+        // Need to be in STA or AP+STA mode to scan
+        if (WiFi.getMode() == WIFI_AP) {
+            WiFi.mode(WIFI_AP_STA);
+            delay(100);
+        }
+
+        Serial.println(F("Starting async WiFi scan..."));
+        WiFi.scanNetworks(true);  // async=true
+        _scanInProgress = true;
+    }
+
+    // Check if scan is complete and get results
+    // Returns: -1 = still scanning, 0+ = number of results
+    int getScanResults(String* ssids, int* rssis, int maxNetworks) {
+        if (!_scanInProgress) return -2;  // scan not started
+
+        int n = WiFi.scanComplete();
+        if (n == WIFI_SCAN_RUNNING) return -1;  // still scanning
+
+        _scanInProgress = false;
+
+        Serial.print(F("Scan found "));
+        Serial.print(n);
+        Serial.println(F(" networks"));
+
+        int count = 0;
+        if (n > 0) {
+            count = min(n, maxNetworks);
+            for (int i = 0; i < count; i++) {
+                ssids[i] = WiFi.SSID(i);
+                rssis[i] = WiFi.RSSI(i);
+            }
         }
 
         WiFi.scanDelete();
+
+        // Restore AP mode
+        if (_apMode) {
+            WiFi.mode(WIFI_AP);
+        }
+
         return count;
     }
+
+    bool isScanInProgress() const { return _scanInProgress; }
 
     // Getters
     bool isConnected() const {
@@ -270,6 +319,26 @@ public:
         if (!_apMode) {
             startAPMode();
         }
+    }
+
+    // Schedule a connection attempt (non-blocking, executed from main loop)
+    void scheduleConnect(const char* ssid, const char* password) {
+        strlcpy(_pendingSSID, ssid, sizeof(_pendingSSID));
+        strlcpy(_pendingPassword, password, sizeof(_pendingPassword));
+        _pendingConnect = true;
+        Serial.print(F("WiFi connect scheduled for: "));
+        Serial.println(_pendingSSID);
+    }
+
+    // Check and execute pending connection (call from main loop)
+    bool handlePendingConnect() {
+        if (!_pendingConnect) return false;
+        _pendingConnect = false;
+
+        Serial.print(F("Executing scheduled WiFi connect to: "));
+        Serial.println(_pendingSSID);
+
+        return connectToNetwork(_pendingSSID, _pendingPassword);
     }
 };
 

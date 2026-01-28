@@ -726,22 +726,46 @@
         }
 
         async function scanWifi() {
-            document.getElementById('wifi-networks').innerHTML = 'Scanning...';
-            const res = await fetch('/api/wifi/scan');
-            const data = await res.json();
-
             const container = document.getElementById('wifi-networks');
-            container.innerHTML = '';
+            container.innerHTML = 'Scanning...';
 
-            data.networks.forEach(n => {
-                const div = document.createElement('div');
-                div.className = 'wifi-network';
-                div.innerHTML = `<span>${n.ssid}</span><span>${n.rssi} dBm</span>`;
-                div.onclick = () => {
-                    document.getElementById('wifi-new-ssid').value = n.ssid;
-                };
-                container.appendChild(div);
-            });
+            // Start the scan
+            await fetch('/api/wifi/scan', {method: 'POST'});
+
+            // Poll for results
+            let attempts = 0;
+            const maxAttempts = 20; // 10 seconds max
+            const poll = setInterval(async () => {
+                attempts++;
+                try {
+                    const res = await fetch('/api/wifi/scan');
+                    const data = await res.json();
+
+                    if (data.status === 'complete') {
+                        clearInterval(poll);
+                        container.innerHTML = '';
+                        if (data.networks.length === 0) {
+                            container.innerHTML = 'No networks found';
+                            return;
+                        }
+                        data.networks.forEach(n => {
+                            const div = document.createElement('div');
+                            div.className = 'wifi-network';
+                            div.innerHTML = `<span>${n.ssid}</span><span>${n.rssi} dBm</span>`;
+                            div.onclick = () => {
+                                document.getElementById('wifi-new-ssid').value = n.ssid;
+                            };
+                            container.appendChild(div);
+                        });
+                    } else if (data.status !== 'scanning' || attempts >= maxAttempts) {
+                        clearInterval(poll);
+                        container.innerHTML = 'Scan failed or timed out';
+                    }
+                } catch (e) {
+                    clearInterval(poll);
+                    container.innerHTML = 'Scan error';
+                }
+            }, 500);
         }
 
         async function connectWifi() {

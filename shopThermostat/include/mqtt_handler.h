@@ -15,8 +15,8 @@
 
 class MQTTHandler {
 private:
-    WiFiClient _wifiClient;
-    PubSubClient _mqtt;
+    WiFiClient* _wifiClient;
+    PubSubClient* _mqtt;
     ConfigManager* _config;
     TemperatureManager* _temps;
     ThermostatController* _controller;
@@ -35,7 +35,8 @@ private:
 
 public:
     MQTTHandler(ConfigManager* config, TemperatureManager* temps, ThermostatController* controller)
-        : _mqtt(_wifiClient),
+        : _wifiClient(nullptr),
+          _mqtt(nullptr),
           _config(config),
           _temps(temps),
           _controller(controller),
@@ -45,18 +46,23 @@ public:
           _lastPublish(0),
           _discoveryPublished(false) {
 
-        _deviceId = String(ESP.getChipId(), HEX);
-        _deviceId.toLowerCase();
         _instance = this;
     }
 
     void begin() {
         if (!_config->mqtt.enabled) return;
 
+        // Create instances (deferred to avoid global construction issues)
+        _wifiClient = new WiFiClient();
+        _mqtt = new PubSubClient(*_wifiClient);
+
+        _deviceId = String(ESP.getChipId(), HEX);
+        _deviceId.toLowerCase();
+
         _baseTopic = String(_config->mqtt.baseTopic);
-        _mqtt.setServer(_config->mqtt.broker, _config->mqtt.port);
-        _mqtt.setCallback(mqttCallback);
-        _mqtt.setKeepAlive(MQTT_KEEPALIVE);
+        _mqtt->setServer(_config->mqtt.broker, _config->mqtt.port);
+        _mqtt->setCallback(mqttCallback);
+        _mqtt->setKeepAlive(MQTT_KEEPALIVE);
 
         Serial.println(F("MQTT initialized"));
     }
@@ -64,7 +70,7 @@ public:
     void update() {
         if (!_config->mqtt.enabled) return;
 
-        if (!_mqtt.connected()) {
+        if (!_mqtt->connected()) {
             _connected = false;
 
             if (millis() - _lastConnectAttempt > _reconnectDelay) {
@@ -73,7 +79,7 @@ public:
             }
         } else {
             _connected = true;
-            _mqtt.loop();
+            _mqtt->loop();
 
             // Publish discovery if not done
             if (!_discoveryPublished) {
@@ -94,7 +100,7 @@ public:
 
         bool result;
         if (strlen(_config->mqtt.username) > 0) {
-            result = _mqtt.connect(
+            result = _mqtt->connect(
                 clientId.c_str(),
                 _config->mqtt.username,
                 _config->mqtt.password,
@@ -104,7 +110,7 @@ public:
                 "offline"
             );
         } else {
-            result = _mqtt.connect(
+            result = _mqtt->connect(
                 clientId.c_str(),
                 willTopic.c_str(),
                 1,
@@ -120,7 +126,7 @@ public:
             _discoveryPublished = false;
 
             // Publish online status
-            _mqtt.publish(willTopic.c_str(), "online", true);
+            _mqtt->publish(willTopic.c_str(), "online", true);
 
             // Subscribe to command topics
             subscribeToCommands();
@@ -128,7 +134,7 @@ public:
             return true;
         } else {
             Serial.print(F("MQTT connection failed, rc="));
-            Serial.println(_mqtt.state());
+            Serial.println(_mqtt->state());
 
             // Exponential backoff
             _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)MQTT_RECONNECT_DELAY_MAX);
@@ -138,11 +144,11 @@ public:
     }
 
     void subscribeToCommands() {
-        _mqtt.subscribe((_baseTopic + "/floor/target/set").c_str());
-        _mqtt.subscribe((_baseTopic + "/air/target/set").c_str());
-        _mqtt.subscribe((_baseTopic + "/floor/mode/set").c_str());
-        _mqtt.subscribe((_baseTopic + "/air/mode/set").c_str());
-        _mqtt.subscribe((_baseTopic + "/command").c_str());
+        _mqtt->subscribe((_baseTopic + "/floor/target/set").c_str());
+        _mqtt->subscribe((_baseTopic + "/air/target/set").c_str());
+        _mqtt->subscribe((_baseTopic + "/floor/mode/set").c_str());
+        _mqtt->subscribe((_baseTopic + "/air/mode/set").c_str());
+        _mqtt->subscribe((_baseTopic + "/command").c_str());
     }
 
     static void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -277,7 +283,7 @@ public:
         String payload;
         serializeJson(doc, payload);
 
-        _mqtt.publish(topic.c_str(), payload.c_str(), true);
+        _mqtt->publish(topic.c_str(), payload.c_str(), true);
     }
 
     void publishSensorDiscovery(const char* sensor, const char* name, const char* deviceClass, const char* unit) {
@@ -318,7 +324,7 @@ public:
         String payload;
         serializeJson(doc, payload);
 
-        _mqtt.publish(topic.c_str(), payload.c_str(), true);
+        _mqtt->publish(topic.c_str(), payload.c_str(), true);
     }
 
     void publishBinarySensorDiscovery(const char* sensor, const char* name, const char* deviceClass) {
@@ -350,7 +356,7 @@ public:
         String payload;
         serializeJson(doc, payload);
 
-        _mqtt.publish(topic.c_str(), payload.c_str(), true);
+        _mqtt->publish(topic.c_str(), payload.c_str(), true);
     }
 
     void publishState() {
@@ -403,7 +409,7 @@ public:
 
     void publish(const char* subtopic, const char* payload, bool retained = false) {
         String topic = _baseTopic + "/" + subtopic;
-        _mqtt.publish(topic.c_str(), payload, retained);
+        _mqtt->publish(topic.c_str(), payload, retained);
     }
 
     bool isConnected() const {

@@ -31,8 +31,8 @@ public:
     };
 
 private:
-    OneWire _oneWire;
-    DallasTemperature _sensors;
+    OneWire* _oneWire;
+    DallasTemperature* _sensors;
     SensorAddresses _addresses;
     float _calibration[SENSOR_COUNT];
     Readings _readings;
@@ -47,7 +47,7 @@ private:
     }
 
 public:
-    TemperatureManager() : _oneWire(PIN_ONEWIRE), _sensors(&_oneWire) {
+    TemperatureManager() : _oneWire(nullptr), _sensors(nullptr) {
         _sensorsFound = false;
         _deviceCount = 0;
         _lastReadTime = 0;
@@ -69,15 +69,38 @@ public:
     }
 
     void begin() {
-        _sensors.begin();
-        _deviceCount = _sensors.getDeviceCount();
+        Serial.println(F("Creating OneWire..."));
+        yield();
+
+        // Create instances (deferred to avoid global construction issues)
+        _oneWire = new OneWire(PIN_ONEWIRE);
+
+        Serial.println(F("Creating DallasTemperature..."));
+        yield();
+
+        _sensors = new DallasTemperature(_oneWire);
+
+        Serial.println(F("Calling sensors begin..."));
+        yield();
+
+        // Set non-blocking mode BEFORE begin to avoid hangs
+        _sensors->setWaitForConversion(false);
+
+        yield();
+        _sensors->begin();
+        yield();
+
+        Serial.println(F("Getting device count..."));
+        _deviceCount = _sensors->getDeviceCount();
         _sensorsFound = (_deviceCount > 0);
 
-        // Set resolution to 12 bits for all sensors
-        _sensors.setResolution(12);
+        yield();
 
-        // Don't wait for conversion
-        _sensors.setWaitForConversion(false);
+        // Set resolution to 12 bits for all sensors (only if sensors found)
+        if (_sensorsFound) {
+            _sensors->setResolution(12);
+            yield();
+        }
 
         Serial.print(F("Found "));
         Serial.print(_deviceCount);
@@ -102,18 +125,18 @@ public:
     }
 
     void requestTemperatures() {
-        _sensors.requestTemperatures();
+        _sensors->requestTemperatures();
     }
 
     void update() {
         _readings.timestamp = millis();
 
         // Read each sensor
-        float rawFloor = _sensors.getTempC(_addresses.floor);
-        float rawAir = _sensors.getTempC(_addresses.air);
-        float rawOutdoor = _sensors.getTempC(_addresses.outdoor);
-        float rawWaterIn = _sensors.getTempC(_addresses.waterIn);
-        float rawWaterOut = _sensors.getTempC(_addresses.waterOut);
+        float rawFloor = _sensors->getTempC(_addresses.floor);
+        float rawAir = _sensors->getTempC(_addresses.air);
+        float rawOutdoor = _sensors->getTempC(_addresses.outdoor);
+        float rawWaterIn = _sensors->getTempC(_addresses.waterIn);
+        float rawWaterOut = _sensors->getTempC(_addresses.waterOut);
 
         // Validate and apply calibration
         _readings.valid[SENSOR_FLOOR] = isValidReading(rawFloor);
@@ -213,15 +236,15 @@ public:
 
         DeviceAddress tempAddress;
         for (int i = 0; i < _deviceCount; i++) {
-            if (_sensors.getAddress(tempAddress, i)) {
+            if (_sensors->getAddress(tempAddress, i)) {
                 Serial.print(F("Sensor "));
                 Serial.print(i);
                 Serial.print(F(" Address: "));
                 printAddress(tempAddress);
 
-                _sensors.requestTemperaturesByAddress(tempAddress);
+                _sensors->requestTemperaturesByAddress(tempAddress);
                 delay(750); // Wait for conversion
-                float tempC = _sensors.getTempC(tempAddress);
+                float tempC = _sensors->getTempC(tempAddress);
 
                 Serial.print(F(" | Temp: "));
                 Serial.print(tempC);

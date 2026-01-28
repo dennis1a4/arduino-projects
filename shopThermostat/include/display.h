@@ -30,7 +30,7 @@ public:
     };
 
 private:
-    LiquidCrystal_I2C _lcd;
+    LiquidCrystal_I2C* _lcd;
     DisplayMode _currentMode;
     bool _menuActive;
     int _menuIndex;
@@ -58,7 +58,7 @@ private:
 
 public:
     DisplayManager()
-        : _lcd(LCD_ADDRESS, LCD_COLS, LCD_ROWS),
+        : _lcd(nullptr),
           _currentMode(MODE_TEMPS),
           _menuActive(false),
           _menuIndex(0),
@@ -76,21 +76,23 @@ public:
           _scheduleInfo(nullptr) {}
 
     void begin() {
-        _lcd.init();
-        _lcd.backlight();
+        // Create LCD instance (deferred to avoid global construction issues)
+        _lcd = new LiquidCrystal_I2C(LCD_ADDRESS, LCD_COLS, LCD_ROWS);
+        _lcd->init();
+        _lcd->backlight();
 
         // Create custom characters
-        _lcd.createChar(CHAR_DEGREE, degreeChar);
-        _lcd.createChar(CHAR_WIFI_ON, wifiOnChar);
-        _lcd.createChar(CHAR_WIFI_OFF, wifiOffChar);
-        _lcd.createChar(CHAR_HEAT, heatChar);
-        _lcd.createChar(CHAR_DROP, dropChar);
+        _lcd->createChar(CHAR_DEGREE, degreeChar);
+        _lcd->createChar(CHAR_WIFI_ON, wifiOnChar);
+        _lcd->createChar(CHAR_WIFI_OFF, wifiOffChar);
+        _lcd->createChar(CHAR_HEAT, heatChar);
+        _lcd->createChar(CHAR_DROP, dropChar);
 
-        _lcd.clear();
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("Shop Thermostat"));
-        _lcd.setCursor(0, 1);
-        _lcd.print(F("Starting..."));
+        _lcd->clear();
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("Shop Thermostat"));
+        _lcd->setCursor(0, 1);
+        _lcd->print(F("Starting..."));
     }
 
     void setReferences(TemperatureManager* temps,
@@ -127,7 +129,7 @@ public:
 
         const TemperatureManager::Readings& readings = _temps->getReadings();
 
-        _lcd.clear();
+        _lcd->clear();
 
         switch (_currentMode) {
             case MODE_TEMPS:
@@ -153,127 +155,127 @@ public:
 
     void displayTemps(const TemperatureManager::Readings& readings) {
         // Line 1: F:5.2° A:18.5°
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("F:"));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("F:"));
         if (readings.valid[SENSOR_FLOOR]) {
             printTemp(readings.floor);
         } else {
-            _lcd.print(F("ERR"));
+            _lcd->print(F("ERR"));
         }
-        _lcd.print(F(" A:"));
+        _lcd->print(F(" A:"));
         if (readings.valid[SENSOR_AIR]) {
             printTemp(readings.air);
         } else {
-            _lcd.print(F("ERR"));
+            _lcd->print(F("ERR"));
         }
 
         // Line 2: P:ON H:OFF
-        _lcd.setCursor(0, 1);
-        _lcd.print(F("P:"));
-        _lcd.print(_controller->isRelayOn(ZONE_FLOOR) ? F("ON ") : F("OFF"));
-        _lcd.print(F(" H:"));
-        _lcd.print(_controller->isRelayOn(ZONE_AIR) ? F("ON ") : F("OFF"));
+        _lcd->setCursor(0, 1);
+        _lcd->print(F("P:"));
+        _lcd->print(_controller->isRelayOn(ZONE_FLOOR) ? F("ON ") : F("OFF"));
+        _lcd->print(F(" H:"));
+        _lcd->print(_controller->isRelayOn(ZONE_AIR) ? F("ON ") : F("OFF"));
     }
 
     void displayTargets(const TemperatureManager::Readings& readings) {
         // Line 1: T:5/20° Out:-2°
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("T:"));
-        _lcd.print((int)_config->zones[ZONE_FLOOR].targetTemp);
-        _lcd.print(F("/"));
-        _lcd.print((int)_config->zones[ZONE_AIR].targetTemp);
-        _lcd.write(CHAR_DEGREE);
-        _lcd.print(F(" O:"));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("T:"));
+        _lcd->print((int)_config->zones[ZONE_FLOOR].targetTemp);
+        _lcd->print(F("/"));
+        _lcd->print((int)_config->zones[ZONE_AIR].targetTemp);
+        _lcd->write(CHAR_DEGREE);
+        _lcd->print(F(" O:"));
         if (readings.valid[SENSOR_OUTDOOR]) {
             printTemp(readings.outdoor);
         } else {
-            _lcd.print(F("--"));
+            _lcd->print(F("--"));
         }
 
         // Line 2: WiFi:OK MQTT:OK
-        _lcd.setCursor(0, 1);
-        _lcd.write(_wifiConnected && *_wifiConnected ? CHAR_WIFI_ON : CHAR_WIFI_OFF);
-        _lcd.print(_wifiConnected && *_wifiConnected ? F("OK ") : F("-- "));
-        _lcd.print(F("MQTT:"));
-        _lcd.print(_mqttConnected && *_mqttConnected ? F("OK") : F("--"));
+        _lcd->setCursor(0, 1);
+        _lcd->write(_wifiConnected && *_wifiConnected ? CHAR_WIFI_ON : CHAR_WIFI_OFF);
+        _lcd->print(_wifiConnected && *_wifiConnected ? F("OK ") : F("-- "));
+        _lcd->print(F("MQTT:"));
+        _lcd->print(_mqttConnected && *_mqttConnected ? F("OK") : F("--"));
     }
 
     void displayWaterTemps(const TemperatureManager::Readings& readings) {
         // Line 1: Tank In:  45.2°C
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("Tank In: "));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("Tank In: "));
         if (readings.valid[SENSOR_WATER_IN]) {
             printTemp(readings.waterIn);
-            _lcd.write(CHAR_DEGREE);
-            _lcd.print(_config->system.useFahrenheit ? F("F") : F("C"));
+            _lcd->write(CHAR_DEGREE);
+            _lcd->print(_config->system.useFahrenheit ? F("F") : F("C"));
         } else {
-            _lcd.print(F("ERR"));
+            _lcd->print(F("ERR"));
         }
 
         // Line 2: Tank Out: 42.8°C
-        _lcd.setCursor(0, 1);
-        _lcd.print(F("Tank Out:"));
+        _lcd->setCursor(0, 1);
+        _lcd->print(F("Tank Out:"));
         if (readings.valid[SENSOR_WATER_OUT]) {
             printTemp(readings.waterOut);
-            _lcd.write(CHAR_DEGREE);
-            _lcd.print(_config->system.useFahrenheit ? F("F") : F("C"));
+            _lcd->write(CHAR_DEGREE);
+            _lcd->print(_config->system.useFahrenheit ? F("F") : F("C"));
         } else {
-            _lcd.print(F("ERR"));
+            _lcd->print(F("ERR"));
         }
     }
 
     void displayWaterDelta(const TemperatureManager::Readings& readings) {
         // Line 1: ΔT: 2.4°C Flow:OK
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("dT:"));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("dT:"));
         if (readings.valid[SENSOR_WATER_IN] && readings.valid[SENSOR_WATER_OUT]) {
-            _lcd.print(readings.waterDelta, 1);
-            _lcd.write(CHAR_DEGREE);
-            _lcd.print(F(" "));
+            _lcd->print(readings.waterDelta, 1);
+            _lcd->write(CHAR_DEGREE);
+            _lcd->print(F(" "));
             FlowStatus fs = _temps->getFlowStatus();
-            _lcd.print(TemperatureManager::getFlowStatusString(fs));
+            _lcd->print(TemperatureManager::getFlowStatusString(fs));
         } else {
-            _lcd.print(F("-- ERR"));
+            _lcd->print(F("-- ERR"));
         }
 
         // Line 2: Pump: 3h 24m
-        _lcd.setCursor(0, 1);
-        _lcd.print(F("Pump:"));
-        _lcd.print(ThermostatController::formatRuntime(_controller->getRuntime(ZONE_FLOOR)));
+        _lcd->setCursor(0, 1);
+        _lcd->print(F("Pump:"));
+        _lcd->print(ThermostatController::formatRuntime(_controller->getRuntime(ZONE_FLOOR)));
     }
 
     void displaySchedule() {
         // Line 1: Sched: ACTIVE or OFF
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("Sched: "));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("Sched: "));
         if (_scheduleActive && *_scheduleActive) {
-            _lcd.print(F("ACTIVE"));
+            _lcd->print(F("ACTIVE"));
         } else {
-            _lcd.print(F("OFF"));
+            _lcd->print(F("OFF"));
         }
 
         // Line 2: Schedule info or --
-        _lcd.setCursor(0, 1);
+        _lcd->setCursor(0, 1);
         if (_scheduleInfo && _scheduleInfo->length() > 0) {
-            _lcd.print(*_scheduleInfo);
+            _lcd->print(*_scheduleInfo);
         } else {
-            _lcd.print(F("No active sched"));
+            _lcd->print(F("No active sched"));
         }
     }
 
     void displaySystem() {
         // Line 1: IP address
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("IP:"));
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("IP:"));
         if (_ipAddress && _ipAddress->length() > 0) {
-            _lcd.print(*_ipAddress);
+            _lcd->print(*_ipAddress);
         } else {
-            _lcd.print(F("Not connected"));
+            _lcd->print(F("Not connected"));
         }
 
         // Line 2: Uptime
-        _lcd.setCursor(0, 1);
-        _lcd.print(F("Up:"));
+        _lcd->setCursor(0, 1);
+        _lcd->print(F("Up:"));
         if (_uptimeSeconds) {
             unsigned long secs = *_uptimeSeconds;
             unsigned long mins = secs / 60;
@@ -281,23 +283,23 @@ public:
             unsigned long days = hours / 24;
 
             if (days > 0) {
-                _lcd.print(days);
-                _lcd.print(F("d "));
-                _lcd.print(hours % 24);
-                _lcd.print(F("h"));
+                _lcd->print(days);
+                _lcd->print(F("d "));
+                _lcd->print(hours % 24);
+                _lcd->print(F("h"));
             } else if (hours > 0) {
-                _lcd.print(hours);
-                _lcd.print(F("h "));
-                _lcd.print(mins % 60);
-                _lcd.print(F("m"));
+                _lcd->print(hours);
+                _lcd->print(F("h "));
+                _lcd->print(mins % 60);
+                _lcd->print(F("m"));
             } else {
-                _lcd.print(mins);
-                _lcd.print(F("m "));
-                _lcd.print(secs % 60);
-                _lcd.print(F("s"));
+                _lcd->print(mins);
+                _lcd->print(F("m "));
+                _lcd->print(secs % 60);
+                _lcd->print(F("s"));
             }
         } else {
-            _lcd.print(F("--"));
+            _lcd->print(F("--"));
         }
     }
 
@@ -307,9 +309,9 @@ public:
         }
 
         if (temp >= 100 || temp <= -10) {
-            _lcd.print((int)temp);
+            _lcd->print((int)temp);
         } else {
-            _lcd.print(temp, 1);
+            _lcd->print(temp, 1);
         }
     }
 
@@ -367,8 +369,8 @@ public:
     void menuSelect() {
         if (_menuIndex == 6) {
             // Reboot
-            _lcd.clear();
-            _lcd.print(F("Rebooting..."));
+            _lcd->clear();
+            _lcd->print(F("Rebooting..."));
             delay(1000);
             ESP.restart();
         } else if (_menuIndex >= 2 && _menuIndex <= 5) {
@@ -416,8 +418,8 @@ public:
     }
 
     void updateMenu() {
-        _lcd.clear();
-        _lcd.setCursor(0, 0);
+        _lcd->clear();
+        _lcd->setCursor(0, 0);
 
         const char* menuItems[] = {
             "WiFi Info",
@@ -429,52 +431,52 @@ public:
             "Reboot System"
         };
 
-        _lcd.print(F(">"));
-        _lcd.print(menuItems[_menuIndex]);
+        _lcd->print(F(">"));
+        _lcd->print(menuItems[_menuIndex]);
 
-        _lcd.setCursor(0, 1);
+        _lcd->setCursor(0, 1);
 
         switch (_menuIndex) {
             case 0: // WiFi Info
                 if (_wifiConnected && *_wifiConnected && _ipAddress) {
-                    _lcd.print(*_ipAddress);
+                    _lcd->print(*_ipAddress);
                 } else {
-                    _lcd.print(F("Not connected"));
+                    _lcd->print(F("Not connected"));
                 }
                 break;
             case 1: // MQTT Status
                 if (_mqttConnected && *_mqttConnected) {
-                    _lcd.print(F("Connected"));
+                    _lcd->print(F("Connected"));
                 } else {
-                    _lcd.print(F("Disconnected"));
+                    _lcd->print(F("Disconnected"));
                 }
                 break;
             case 2: // Floor Target
-                if (_adjustingValue) _lcd.print(F("["));
-                _lcd.print(_config->zones[ZONE_FLOOR].targetTemp, 1);
-                _lcd.write(CHAR_DEGREE);
-                _lcd.print(_config->system.useFahrenheit ? F("F") : F("C"));
-                if (_adjustingValue) _lcd.print(F("]"));
+                if (_adjustingValue) _lcd->print(F("["));
+                _lcd->print(_config->zones[ZONE_FLOOR].targetTemp, 1);
+                _lcd->write(CHAR_DEGREE);
+                _lcd->print(_config->system.useFahrenheit ? F("F") : F("C"));
+                if (_adjustingValue) _lcd->print(F("]"));
                 break;
             case 3: // Air Target
-                if (_adjustingValue) _lcd.print(F("["));
-                _lcd.print(_config->zones[ZONE_AIR].targetTemp, 1);
-                _lcd.write(CHAR_DEGREE);
-                _lcd.print(_config->system.useFahrenheit ? F("F") : F("C"));
-                if (_adjustingValue) _lcd.print(F("]"));
+                if (_adjustingValue) _lcd->print(F("["));
+                _lcd->print(_config->zones[ZONE_AIR].targetTemp, 1);
+                _lcd->write(CHAR_DEGREE);
+                _lcd->print(_config->system.useFahrenheit ? F("F") : F("C"));
+                if (_adjustingValue) _lcd->print(F("]"));
                 break;
             case 4: // Floor Override
-                if (_adjustingValue) _lcd.print(F("["));
-                _lcd.print(getOverrideName(_config->zones[ZONE_FLOOR].override));
-                if (_adjustingValue) _lcd.print(F("]"));
+                if (_adjustingValue) _lcd->print(F("["));
+                _lcd->print(getOverrideName(_config->zones[ZONE_FLOOR].override));
+                if (_adjustingValue) _lcd->print(F("]"));
                 break;
             case 5: // Air Override
-                if (_adjustingValue) _lcd.print(F("["));
-                _lcd.print(getOverrideName(_config->zones[ZONE_AIR].override));
-                if (_adjustingValue) _lcd.print(F("]"));
+                if (_adjustingValue) _lcd->print(F("["));
+                _lcd->print(getOverrideName(_config->zones[ZONE_AIR].override));
+                if (_adjustingValue) _lcd->print(F("]"));
                 break;
             case 6: // Reboot
-                _lcd.print(F("Press to reboot"));
+                _lcd->print(F("Press to reboot"));
                 break;
         }
     }
@@ -489,29 +491,29 @@ public:
     }
 
     void showMessage(const char* line1, const char* line2 = nullptr) {
-        _lcd.clear();
-        _lcd.setCursor(0, 0);
-        _lcd.print(line1);
+        _lcd->clear();
+        _lcd->setCursor(0, 0);
+        _lcd->print(line1);
         if (line2) {
-            _lcd.setCursor(0, 1);
-            _lcd.print(line2);
+            _lcd->setCursor(0, 1);
+            _lcd->print(line2);
         }
     }
 
     void showError(const char* error) {
-        _lcd.clear();
-        _lcd.setCursor(0, 0);
-        _lcd.print(F("ERROR:"));
-        _lcd.setCursor(0, 1);
-        _lcd.print(error);
+        _lcd->clear();
+        _lcd->setCursor(0, 0);
+        _lcd->print(F("ERROR:"));
+        _lcd->setCursor(0, 1);
+        _lcd->print(error);
     }
 
     void setBacklight(bool on) {
         _backlightOn = on;
         if (on) {
-            _lcd.backlight();
+            _lcd->backlight();
         } else {
-            _lcd.noBacklight();
+            _lcd->noBacklight();
         }
     }
 

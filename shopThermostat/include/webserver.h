@@ -31,7 +31,7 @@
 
 class WebServerManager {
 private:
-    AsyncWebServer _server;
+    AsyncWebServer* _server;
     ConfigManager* _config;
     TemperatureManager* _temps;
     ThermostatController* _controller;
@@ -42,7 +42,7 @@ public:
     WebServerManager(ConfigManager* config, TemperatureManager* temps,
                      ThermostatController* controller, ScheduleManager* scheduler,
                      WiFiConnectionManager* wifi)
-        : _server(80),
+        : _server(nullptr),
           _config(config),
           _temps(temps),
           _controller(controller),
@@ -50,136 +50,143 @@ public:
           _wifi(wifi) {}
 
     void begin() {
+        // Create server instance (deferred to avoid global construction issues)
+        _server = new AsyncWebServer(80);
+
         // Serve static files from LittleFS
-        _server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+        _server->serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
         // API endpoints
         setupAPIEndpoints();
 
         // Start server
-        _server.begin();
+        _server->begin();
         Serial.println(F("Web server started"));
     }
 
     void setupAPIEndpoints() {
         // Get system status
-        _server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetStatus(request);
         });
 
         // Get temperatures
-        _server.on("/api/temps", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/temps", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetTemps(request);
         });
 
         // Get water system status
-        _server.on("/api/water", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/water", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetWater(request);
         });
 
         // Get/set configuration
-        _server.on("/api/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetConfig(request);
         });
 
         // Set zone settings
-        _server.on("/api/zone", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/zone", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetZone(request, data, len);
         });
 
         // Set override
-        _server.on("/api/override", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/override", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetOverride(request, data, len);
         });
 
         // Get schedules
-        _server.on("/api/schedules", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/schedules", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetSchedules(request);
         });
 
         // Set schedule
-        _server.on("/api/schedule", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/schedule", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetSchedule(request, data, len);
         });
 
         // Delete schedule
-        _server.on("/api/schedule/delete", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/schedule/delete", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleDeleteSchedule(request, data, len);
         });
 
         // MQTT settings
-        _server.on("/api/mqtt", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/mqtt", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetMqtt(request);
         });
 
-        _server.on("/api/mqtt", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/mqtt", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetMqtt(request, data, len);
         });
 
-        // WiFi settings
-        _server.on("/api/wifi", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        // WiFi settings (scan must be registered before /api/wifi to avoid prefix match)
+        _server->on("/api/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest *request) {
+            handleWifiScanResults(request);
+        });
+
+        _server->on("/api/wifi/scan", HTTP_POST, [this](AsyncWebServerRequest *request) {
+            handleWifiScanStart(request);
+        });
+
+        _server->on("/api/wifi", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetWifi(request);
         });
 
-        _server.on("/api/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest *request) {
-            handleWifiScan(request);
-        });
-
-        _server.on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetWifi(request, data, len);
         });
 
         // System settings
-        _server.on("/api/system", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/system", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleGetSystem(request);
         });
 
-        _server.on("/api/system", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/system", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetSystem(request, data, len);
         });
 
         // Sensor discovery
-        _server.on("/api/sensors/discover", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/sensors/discover", HTTP_GET, [this](AsyncWebServerRequest *request) {
             handleSensorDiscover(request);
         });
 
         // Set sensor addresses
-        _server.on("/api/sensors", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/sensors", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleSetSensors(request, data, len);
         });
 
         // Reboot
-        _server.on("/api/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) {
             request->send(200, "application/json", "{\"status\":\"rebooting\"}");
             delay(500);
             ESP.restart();
         });
 
         // Reset thermal runaway
-        _server.on("/api/reset/thermal", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/reset/thermal", HTTP_POST, [this](AsyncWebServerRequest *request) {
             // Body handled in onBody
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             handleResetThermal(request, data, len);
         });
 
         // Save config
-        _server.on("/api/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        _server->on("/api/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
             if (_config->save()) {
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
             } else {
@@ -188,7 +195,7 @@ public:
         });
 
         // Captive portal redirect
-        _server.onNotFound([this](AsyncWebServerRequest *request) {
+        _server->onNotFound([this](AsyncWebServerRequest *request) {
             if (_wifi->isAPMode()) {
                 request->redirect("http://" + _wifi->getIPAddress() + "/");
             } else {
@@ -559,20 +566,35 @@ public:
         request->send(200, "application/json", response);
     }
 
-    void handleWifiScan(AsyncWebServerRequest *request) {
-        const int maxNetworks = 10;
+    void handleWifiScanStart(AsyncWebServerRequest *request) {
+        _wifi->startScan();
+        request->send(200, "application/json", "{\"status\":\"scanning\"}");
+    }
+
+    void handleWifiScanResults(AsyncWebServerRequest *request) {
+        const int maxNetworks = 15;
         String ssids[maxNetworks];
         int rssis[maxNetworks];
 
-        int count = _wifi->scanNetworks(ssids, rssis, maxNetworks);
+        int result = _wifi->getScanResults(ssids, rssis, maxNetworks);
 
         StaticJsonDocument<1024> doc;
-        JsonArray networks = doc.createNestedArray("networks");
 
-        for (int i = 0; i < count; i++) {
-            JsonObject net = networks.createNestedObject();
-            net["ssid"] = ssids[i];
-            net["rssi"] = rssis[i];
+        if (result == -1) {
+            // Still scanning
+            doc["status"] = "scanning";
+        } else if (result == -2) {
+            // No scan started
+            doc["status"] = "idle";
+        } else {
+            // Scan complete
+            doc["status"] = "complete";
+            JsonArray networks = doc.createNestedArray("networks");
+            for (int i = 0; i < result; i++) {
+                JsonObject net = networks.createNestedObject();
+                net["ssid"] = ssids[i];
+                net["rssi"] = rssis[i];
+            }
         }
 
         String response;
@@ -597,16 +619,11 @@ public:
             return;
         }
 
-        // Save and try to connect
-        strlcpy(_config->wifi.ssid, ssid, sizeof(_config->wifi.ssid));
-        strlcpy(_config->wifi.password, password, sizeof(_config->wifi.password));
-        _config->save();
+        // Schedule connection attempt (will save + connect from main loop)
+        // Do NOT save to LittleFS here — writing flash from async TCP context causes watchdog reset
+        _wifi->scheduleConnect(ssid, password);
 
         request->send(200, "application/json", "{\"status\":\"connecting\"}");
-
-        // Connect after sending response
-        delay(100);
-        _wifi->connectToNetwork(ssid, password);
     }
 
     void handleGetSystem(AsyncWebServerRequest *request) {

@@ -159,7 +159,7 @@ public:
             return false;
         }
 
-        StaticJsonDocument<4096> doc;
+        DynamicJsonDocument doc(4096);
         DeserializationError error = deserializeJson(doc, file);
         file.close();
 
@@ -286,7 +286,7 @@ public:
     bool save() {
         if (!_initialized) return false;
 
-        StaticJsonDocument<4096> doc;
+        DynamicJsonDocument doc(4096);
 
         // Save WiFi config
         JsonObject wifiObj = doc.createNestedObject("wifi");
