@@ -1,4 +1,5 @@
 import json
+import os
 
 SCORES_FILE = "/high_scores.json"
 MAX_SCORES = 5
@@ -30,6 +31,7 @@ def save_scores(scores):
     try:
         with open(SCORES_FILE, "w") as f:
             json.dump(scores, f)
+        os.sync()  # Flush to flash so it survives power-off
     except OSError:
         pass  # Flash full or write-protected
 
