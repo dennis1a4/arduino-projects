@@ -102,7 +102,7 @@ class UIManager:
         pal = displayio.Palette(4)
         pal[0] = BLACK  # transparent/bg
         pal.make_transparent(0)
-        pal[1] = 0x202020  # bomb body dark
+        pal[1] = GRAY  # bomb body visible against black bg
         pal[2] = ORANGE  # highlight
         pal[3] = RED  # fuse spark
 
@@ -171,15 +171,15 @@ class UIManager:
         # Draw grid cells as a single bitmap for efficiency
         bmp_w = grid_w
         bmp_h = grid_h
-        # Palette: 0=black, 1=gray(unrevealed), 2=light_gray(revealed),
+        # Palette: 0=black, 1=light_gray(unrevealed), 2=gray(revealed),
         #          3=yellow(cursor), 4=red(flag), 5=dark_gray(border),
         #          6-13=number colors, 14=mine, 15=orange
         num_colors = 16
         bmp = displayio.Bitmap(bmp_w, bmp_h, num_colors)
         pal = displayio.Palette(num_colors)
         pal[0] = BLACK
-        pal[1] = GRAY
-        pal[2] = LIGHT_GRAY
+        pal[1] = LIGHT_GRAY
+        pal[2] = GRAY
         pal[3] = YELLOW
         pal[4] = RED
         pal[5] = DARK_GRAY
