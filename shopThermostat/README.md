@@ -32,9 +32,9 @@ ESP8266-based dual-zone thermostat system for workshop environments with Home As
 | D5 (GPIO14) | 1-Wire Bus (all sensors) |
 | D6 (GPIO12) | Relay 1 - Floor Pump |
 | D7 (GPIO13) | Relay 2 - Electric Heater |
-| D3 (GPIO0) | Encoder A |
-| D4 (GPIO2) | Encoder B |
-| D8 (GPIO15) | Encoder Button |
+| D0 (GPIO16) | Encoder A |
+| D8 (GPIO15) | Encoder B (external pull-down) |
+| D4 (GPIO2) | Encoder Button (external pull-up) |
 
 ## Building
 
@@ -56,7 +56,7 @@ pio run -t uploadfs
 1. On first boot, the device creates an AP: `ShopThermostat-XXXX`
 2. Connect and navigate to `192.168.4.1`
 3. Configure WiFi credentials
-4. Run sensor discovery and assign addresses
+4. DS18B20 sensors are auto-discovered and assigned on boot (first sensor → floor, second → air, etc.)
 5. Configure MQTT broker if using Home Assistant
 
 ## LCD Display Modes

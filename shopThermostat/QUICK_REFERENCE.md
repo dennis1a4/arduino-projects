@@ -6,14 +6,14 @@
 WEMOS D1 MINI
 +--[USB]--+
 |         |
+| D0  ENC |-----> Encoder A
 | D1  SCL |-----> LCD Clock
 | D2  SDA |-----> LCD Data
-| D3  ENC |-----> Encoder A
-| D4  ENC |-----> Encoder B
+| D4  BTN |-----> Encoder Button (has external pull-up)
 | D5  1W  |-----> All Temp Sensors (+ 4.7k pullup to 3.3V)
 | D6  RLY |-----> Floor Pump Relay
 | D7  RLY |-----> Heater Relay
-| D8  BTN |-----> Encoder Button
+| D8  ENC |-----> Encoder B (has external pull-down)
 |         |
 | 5V  GND |-----> Power & Ground
 +---------+
@@ -81,7 +81,7 @@ Pump: 3h 24m    08:00-17:00 20° Up: 5d 3h 22m
 | Problem | Solution |
 |---------|----------|
 | No WiFi | Hold encoder 10 sec for AP mode |
-| Sensor ERR | Check wiring, verify 4.7k pullup |
+| Sensor ERR | Check wiring, verify 4.7kΩ pullup on D5. Sensors auto-discover on boot with retries |
 | Relay stuck | Check web interface, try reboot |
 | RUNAWAY | Reset via web interface after cooling |
 
