@@ -44,9 +44,12 @@ public:
           _lastPos(0) {}
 
     void begin() {
-        pinMode(PIN_ENCODER_A, INPUT_PULLUP);
-        pinMode(PIN_ENCODER_B, INPUT_PULLUP);
-        pinMode(PIN_ENCODER_BTN, INPUT_PULLUP);
+        // GPIO16 (D0) doesn't support INPUT_PULLUP, use INPUT
+        pinMode(PIN_ENCODER_A, INPUT);
+        // D8 has external pull-down; encoder actively drives signal
+        pinMode(PIN_ENCODER_B, INPUT);
+        // D4 has external pull-up; perfect for active-low button
+        pinMode(PIN_ENCODER_BTN, INPUT);
 
         // Read initial state
         _lastState = (digitalRead(PIN_ENCODER_A) << 1) | digitalRead(PIN_ENCODER_B);

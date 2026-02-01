@@ -18,10 +18,12 @@
 // 1-Wire bus for DS18B20 sensors
 #define PIN_ONEWIRE     D5      // GPIO14
 
-// Rotary encoder (avoid boot-sensitive pins D3/GPIO0, D4/GPIO2, D8/GPIO15)
-#define PIN_ENCODER_A   D0      // GPIO16 - Safe for boot
-#define PIN_ENCODER_B   D4      // GPIO2 - Must be HIGH at boot (add pull-up)
-#define PIN_ENCODER_BTN D8      // GPIO15 - Must be LOW at boot (add pull-down)
+// Rotary encoder
+// D4/GPIO2 has external pull-up (ideal for active-low button)
+// D8/GPIO15 has external pull-down (fine for encoder signal which is actively driven)
+#define PIN_ENCODER_A   D0      // GPIO16
+#define PIN_ENCODER_B   D8      // GPIO15 - external pull-down, encoder drives signal
+#define PIN_ENCODER_BTN D4      // GPIO2 - external pull-up, active-low button
 
 // Relay active state (most relay modules are active LOW)
 #define RELAY_ON        LOW
