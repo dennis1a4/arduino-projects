@@ -107,21 +107,55 @@ void setup() {
 
     // Set up sensor addresses from config
     TemperatureManager::SensorAddresses addrs;
+    memset(&addrs, 0, sizeof(addrs));
+    bool hasConfiguredAddresses = false;
     if (strlen(config.sensors.addresses[SENSOR_FLOOR]) == 16) {
         temps.stringToAddress(config.sensors.addresses[SENSOR_FLOOR], addrs.floor);
+        hasConfiguredAddresses = true;
     }
     if (strlen(config.sensors.addresses[SENSOR_AIR]) == 16) {
         temps.stringToAddress(config.sensors.addresses[SENSOR_AIR], addrs.air);
+        hasConfiguredAddresses = true;
     }
     if (strlen(config.sensors.addresses[SENSOR_OUTDOOR]) == 16) {
         temps.stringToAddress(config.sensors.addresses[SENSOR_OUTDOOR], addrs.outdoor);
+        hasConfiguredAddresses = true;
     }
     if (strlen(config.sensors.addresses[SENSOR_WATER_IN]) == 16) {
         temps.stringToAddress(config.sensors.addresses[SENSOR_WATER_IN], addrs.waterIn);
+        hasConfiguredAddresses = true;
     }
     if (strlen(config.sensors.addresses[SENSOR_WATER_OUT]) == 16) {
         temps.stringToAddress(config.sensors.addresses[SENSOR_WATER_OUT], addrs.waterOut);
+        hasConfiguredAddresses = true;
     }
+
+    // Auto-discover sensors if none are configured
+    if (!hasConfiguredAddresses && temps.getDeviceCount() > 0) {
+        Serial.println(F("No sensor addresses configured - auto-discovering..."));
+        temps.autoAssignSensors(addrs);
+
+        // Save discovered addresses to config so they persist
+        DeviceAddress* addrPtrs[] = {
+            &addrs.floor, &addrs.air, &addrs.outdoor, &addrs.waterIn, &addrs.waterOut
+        };
+        bool addressSaved = false;
+        for (int i = 0; i < SENSOR_COUNT; i++) {
+            String addrStr = temps.addressToString(*addrPtrs[i]);
+            if (addrStr != "0000000000000000") {
+                strlcpy(config.sensors.addresses[i], addrStr.c_str(), sizeof(config.sensors.addresses[i]));
+                Serial.print(F("  Sensor "));
+                Serial.print(i);
+                Serial.print(F(" -> "));
+                Serial.println(addrStr);
+                addressSaved = true;
+            }
+        }
+        if (addressSaved) {
+            config.save();
+        }
+    }
+
     temps.setSensorAddresses(addrs);
 
     // Set calibration offsets

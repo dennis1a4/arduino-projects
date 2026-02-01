@@ -86,15 +86,40 @@ public:
         // Set non-blocking mode BEFORE begin to avoid hangs
         _sensors->setWaitForConversion(false);
 
-        yield();
-        _sensors->begin();
-        yield();
+        // Retry sensor discovery - DS18B20 may need time to power up
+        for (int attempt = 0; attempt < 5; attempt++) {
+            yield();
+            _sensors->begin();
+            yield();
 
-        Serial.println(F("Getting device count..."));
-        _deviceCount = _sensors->getDeviceCount();
+            _deviceCount = _sensors->getDeviceCount();
+            Serial.print(F("Discovery attempt "));
+            Serial.print(attempt + 1);
+            Serial.print(F(": found "));
+            Serial.print(_deviceCount);
+            Serial.println(F(" sensor(s)"));
+
+            if (_deviceCount > 0) break;
+
+            // Also try a raw OneWire search for diagnostics
+            uint8_t addr[8];
+            _oneWire->reset_search();
+            if (_oneWire->search(addr)) {
+                Serial.print(F("  OneWire raw search found device: "));
+                for (int i = 0; i < 8; i++) {
+                    if (addr[i] < 16) Serial.print('0');
+                    Serial.print(addr[i], HEX);
+                }
+                Serial.println();
+                // DallasTemperature missed it, retry
+            } else {
+                Serial.println(F("  OneWire raw search found nothing"));
+            }
+
+            delay(250);
+        }
+
         _sensorsFound = (_deviceCount > 0);
-
-        yield();
 
         // Set resolution to 12 bits for all sensors (only if sensors found)
         if (_sensorsFound) {
@@ -225,6 +250,24 @@ public:
 
     bool sensorsFound() const {
         return _sensorsFound;
+    }
+
+    // Auto-assign discovered sensors to address slots (in bus order)
+    // Assigns: first sensor -> floor, second -> air, etc.
+    void autoAssignSensors(SensorAddresses& addrs) {
+        DeviceAddress tempAddress;
+        DeviceAddress* slots[] = {
+            &addrs.floor, &addrs.air, &addrs.outdoor, &addrs.waterIn, &addrs.waterOut
+        };
+        int assignCount = _deviceCount < (int)SENSOR_COUNT ? _deviceCount : (int)SENSOR_COUNT;
+        for (int i = 0; i < assignCount; i++) {
+            if (_sensors->getAddress(tempAddress, i)) {
+                memcpy(slots[i], tempAddress, sizeof(DeviceAddress));
+            }
+        }
+        Serial.print(F("Auto-assigned "));
+        Serial.print(assignCount);
+        Serial.println(F(" sensor(s)"));
     }
 
     // Discovery function to find and print all sensor addresses
