@@ -12,18 +12,19 @@
 #define PIN_SCL         D1      // GPIO5
 
 // Relay outputs
-#define PIN_RELAY_PUMP  D6      // GPIO12 - Floor pump relay
+#define PIN_RELAY_PUMP  D0      // GPIO16 - Floor pump relay (moved from D6 to free D6 for encoder)
 #define PIN_RELAY_HEATER D7     // GPIO13 - Electric heater relay
 
 // 1-Wire bus for DS18B20 sensors
 #define PIN_ONEWIRE     D5      // GPIO14
 
 // Rotary encoder
-// D4/GPIO2 has external pull-up (ideal for active-low button)
-// D8/GPIO15 has external pull-down (fine for encoder signal which is actively driven)
-#define PIN_ENCODER_A   D0      // GPIO16
-#define PIN_ENCODER_B   D8      // GPIO15 - external pull-down, encoder drives signal
-#define PIN_ENCODER_BTN D4      // GPIO2 - external pull-up, active-low button
+// D4/GPIO2 and D6/GPIO12 both support interrupts and INPUT_PULLUP
+// A0 used for button via analogRead
+// D8/GPIO15 left unused (boot pull-down causes issues for encoder and relay)
+#define PIN_ENCODER_A   D4      // GPIO2 - interrupt-capable, INPUT_PULLUP
+#define PIN_ENCODER_B   D6      // GPIO12 - INPUT_PULLUP, interrupt-capable
+#define PIN_ENCODER_BTN A0      // Analog pin - button read via analogRead threshold
 
 // Relay active state (most relay modules are active LOW)
 #define RELAY_ON        LOW
@@ -84,6 +85,9 @@
 
 // Encoder debounce
 #define ENCODER_DEBOUNCE_MS         5
+
+// Analog button threshold (A0 reads ~1024 when open, ~0 when pressed)
+#define BUTTON_ANALOG_THRESHOLD     512
 
 // Button press thresholds
 #define BUTTON_LONG_PRESS_MS        3000    // 3 seconds

@@ -8,6 +8,10 @@
 // ROTARY ENCODER HANDLER
 // ============================================================================
 
+// Forward declaration for ISR trampoline
+class EncoderHandler;
+static EncoderHandler* _isrInstance = nullptr;
+
 class EncoderHandler {
 public:
     enum Event {
@@ -32,6 +36,13 @@ private:
     // For edge detection
     int _lastPos;
 
+    // ISR trampoline - static function that calls instance method
+    static void IRAM_ATTR _isrTrampoline() {
+        if (_isrInstance) {
+            _isrInstance->handleInterrupt();
+        }
+    }
+
 public:
     EncoderHandler()
         : _encoderPos(0),
@@ -44,30 +55,29 @@ public:
           _lastPos(0) {}
 
     void begin() {
-        // GPIO16 (D0) doesn't support INPUT_PULLUP, use INPUT
-        pinMode(PIN_ENCODER_A, INPUT);
-        // D8 has external pull-down; encoder actively drives signal
-        pinMode(PIN_ENCODER_B, INPUT);
-        // D4 has external pull-up; perfect for active-low button
-        pinMode(PIN_ENCODER_BTN, INPUT);
+        // Both encoder pins use INPUT_PULLUP (encoder common connected to GND)
+        pinMode(PIN_ENCODER_A, INPUT_PULLUP);  // D4/GPIO2
+        pinMode(PIN_ENCODER_B, INPUT_PULLUP);  // D6/GPIO12
+        // A0 is analog input (no pinMode needed)
 
         // Read initial state
         _lastState = (digitalRead(PIN_ENCODER_A) << 1) | digitalRead(PIN_ENCODER_B);
         _lastPos = _encoderPos;
 
-        Serial.println(F("Encoder initialized"));
+        // Attach interrupt on encoder A for reliable quadrature decoding
+        _isrInstance = this;
+        attachInterrupt(digitalPinToInterrupt(PIN_ENCODER_A), _isrTrampoline, CHANGE);
+
+        Serial.println(F("Encoder initialized (interrupt on D4)"));
     }
 
-    // Call this from loop() frequently
+    // Call this from loop() frequently (handles button + encoder B polling)
     void update() {
-        // Read encoder state
+        // Read encoder state for B pin changes (A is handled by interrupt,
+        // but we still poll both to catch any B-only transitions)
         uint8_t state = (digitalRead(PIN_ENCODER_A) << 1) | digitalRead(PIN_ENCODER_B);
 
-        // Detect rotation using state table
         if (state != _lastState) {
-            // State transition table for quadrature decoding
-            // CW: 00 -> 01 -> 11 -> 10 -> 00
-            // CCW: 00 -> 10 -> 11 -> 01 -> 00
             switch (_lastState) {
                 case 0b00:
                     if (state == 0b01) _encoderPos++;
@@ -89,8 +99,8 @@ public:
             _lastState = state;
         }
 
-        // Handle button
-        bool buttonNow = (digitalRead(PIN_ENCODER_BTN) == LOW);
+        // Handle button via analog read on A0
+        bool buttonNow = (analogRead(PIN_ENCODER_BTN) < BUTTON_ANALOG_THRESHOLD);
 
         if (buttonNow && !_buttonPressed) {
             // Button just pressed
@@ -168,7 +178,7 @@ public:
         _lastPos = 0;
     }
 
-    // For interrupt-based usage (optional, more responsive)
+    // Called from ISR when encoder A pin changes
     void IRAM_ATTR handleInterrupt() {
         uint8_t state = (digitalRead(PIN_ENCODER_A) << 1) | digitalRead(PIN_ENCODER_B);
 
