@@ -30,11 +30,11 @@ ESP8266-based dual-zone thermostat system for workshop environments with Home As
 | D1 (GPIO5) | I2C SCL (LCD) |
 | D2 (GPIO4) | I2C SDA (LCD) |
 | D5 (GPIO14) | 1-Wire Bus (all sensors) |
-| D6 (GPIO12) | Relay 1 - Floor Pump |
+| D0 (GPIO16) | Relay 1 - Floor Pump |
 | D7 (GPIO13) | Relay 2 - Electric Heater |
-| D0 (GPIO16) | Encoder A |
-| D8 (GPIO15) | Encoder B (external pull-down) |
-| D4 (GPIO2) | Encoder Button (external pull-up) |
+| D4 (GPIO2) | Encoder A (interrupt, INPUT_PULLUP) |
+| D6 (GPIO12) | Encoder B (INPUT_PULLUP) |
+| A0 | Encoder Button (analogRead) |
 
 ## Building
 

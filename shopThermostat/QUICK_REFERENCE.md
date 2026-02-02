@@ -6,14 +6,14 @@
 WEMOS D1 MINI
 +--[USB]--+
 |         |
-| D0  ENC |-----> Encoder A
+| D0  RLY |-----> Floor Pump Relay
 | D1  SCL |-----> LCD Clock
 | D2  SDA |-----> LCD Data
-| D4  BTN |-----> Encoder Button (has external pull-up)
+| D4  ENC |-----> Encoder A (interrupt, INPUT_PULLUP)
 | D5  1W  |-----> All Temp Sensors (+ 4.7k pullup to 3.3V)
-| D6  RLY |-----> Floor Pump Relay
+| D6  ENC |-----> Encoder B (INPUT_PULLUP)
 | D7  RLY |-----> Heater Relay
-| D8  ENC |-----> Encoder B (has external pull-down)
+| A0  BTN |-----> Encoder Button (analogRead, needs pull-up to 3.3V)
 |         |
 | 5V  GND |-----> Power & Ground
 +---------+
