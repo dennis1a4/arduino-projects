@@ -53,16 +53,23 @@ public:
 
     void begin() {
         // Create DNS server instance (deferred to avoid global construction issues)
-        _dnsServer = new DNSServer();
+        if (!_dnsServer) {
+            _dnsServer = new DNSServer();
+        }
+
+        // Prevent WiFi config flash writes (stalls radio and wears flash)
+        WiFi.persistent(false);
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        delay(500);
 
         // Generate AP SSID with chip ID (must be done at runtime)
         _apSSID = "ShopThermostat-" + String(ESP.getChipId(), HEX);
         _apSSID.toUpperCase();
 
-        WiFi.mode(WIFI_STA);
-        WiFi.setAutoReconnect(true);
-
         if (_config->hasWifiCredentials()) {
+            WiFi.mode(WIFI_STA);
+            WiFi.setAutoReconnect(true);
             _state = WIFI_STATE_CONNECTING;
             _lastConnectAttempt = millis();
             WiFi.begin(_config->wifi.ssid, _config->wifi.password);
@@ -78,14 +85,11 @@ public:
         if (_apMode) {
             _dnsServer->processNextRequest();
 
-            // Check AP timeout
-            if (millis() - _apStartTime > AP_TIMEOUT_MS) {
-                Serial.println(F("AP mode timeout"));
-                // Try to reconnect if we have credentials
-                if (_config->hasWifiCredentials()) {
-                    stopAPMode();
-                    begin();
-                }
+            // Check AP timeout - only timeout if we have credentials to try
+            if (_config->hasWifiCredentials() && millis() - _apStartTime > AP_TIMEOUT_MS) {
+                Serial.println(F("AP mode timeout, retrying WiFi..."));
+                stopAPMode();
+                begin();
             }
         } else {
             switch (_state) {
@@ -113,14 +117,16 @@ public:
                     break;
 
                 case WIFI_STATE_DISCONNECTED:
-                    // Try to reconnect periodically
-                    if (millis() - _lastConnectAttempt > WIFI_RECONNECT_INTERVAL) {
+                    if (!_config->hasWifiCredentials()) {
+                        // No credentials saved - go to AP mode
+                        Serial.println(F("No WiFi credentials, entering AP mode"));
+                        startAPMode();
+                    } else if (millis() - _lastConnectAttempt > WIFI_RECONNECT_INTERVAL) {
+                        // Try to reconnect periodically
                         _lastConnectAttempt = millis();
-                        if (_config->hasWifiCredentials()) {
-                            _state = WIFI_STATE_CONNECTING;
-                            WiFi.begin(_config->wifi.ssid, _config->wifi.password);
-                            Serial.println(F("Attempting WiFi reconnection..."));
-                        }
+                        _state = WIFI_STATE_CONNECTING;
+                        WiFi.begin(_config->wifi.ssid, _config->wifi.password);
+                        Serial.println(F("Attempting WiFi reconnection..."));
                     }
                     break;
 
@@ -133,18 +139,23 @@ public:
     void startAPMode() {
         Serial.println(F("Starting AP mode..."));
 
-        WiFi.disconnect();
-        delay(100);
-        WiFi.mode(WIFI_AP);
+        _apMode = true;
+        _state = WIFI_STATE_AP_MODE;
 
-        // Start access point
-        WiFi.softAP(_apSSID.c_str(), DEFAULT_AP_PASSWORD);
+        // Clean radio reset before starting AP
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        delay(500);
+
+        WiFi.mode(WIFI_AP);
+        WiFi.setOutputPower(20.5);  // Max TX power (20.5 dBm)
+        WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+        delay(200);
+        WiFi.softAP(_apSSID.c_str(), DEFAULT_AP_PASSWORD, 1, false, 4);
 
         // Start DNS server for captive portal
         _dnsServer->start(53, "*", WiFi.softAPIP());
 
-        _apMode = true;
-        _state = WIFI_STATE_AP_MODE;
         _apStartTime = millis();
         _ipAddress = WiFi.softAPIP().toString();
 

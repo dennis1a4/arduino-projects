@@ -264,9 +264,13 @@ public:
     }
 
     void displaySystem() {
-        // Line 1: IP address
+        // Line 1: IP address (or AP SSID)
         _lcd->setCursor(0, 0);
-        _lcd->print(F("IP:"));
+        if (_ipAddress && _ipAddress->startsWith("192.168.4.")) {
+            _lcd->print(F("AP:"));
+        } else {
+            _lcd->print(F("IP:"));
+        }
         if (_ipAddress && _ipAddress->length() > 0) {
             _lcd->print(*_ipAddress);
         } else {

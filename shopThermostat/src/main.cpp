@@ -17,6 +17,7 @@
  */
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 
 // Include all modules
 #include "config.h"
@@ -239,6 +240,33 @@ void setup() {
     Serial.println(F("Initializing web server..."));
     webServer.begin();
 
+    // Initialize OTA updates
+    if (wifiConnected) {
+        Serial.println(F("Initializing OTA..."));
+        ArduinoOTA.setHostname(config.system.deviceName);
+        ArduinoOTA.onStart([]() {
+            Serial.println(F("OTA: Update starting..."));
+            display.showMessage("OTA Update", "Starting...");
+        });
+        ArduinoOTA.onEnd([]() {
+            Serial.println(F("OTA: Update complete!"));
+            display.showMessage("OTA Update", "Complete!");
+        });
+        ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("OTA: %u%%\r", (progress / (total / 100)));
+        });
+        ArduinoOTA.onError([](ota_error_t error) {
+            Serial.printf("OTA Error[%u]: ", error);
+            if (error == OTA_AUTH_ERROR) Serial.println(F("Auth Failed"));
+            else if (error == OTA_BEGIN_ERROR) Serial.println(F("Begin Failed"));
+            else if (error == OTA_CONNECT_ERROR) Serial.println(F("Connect Failed"));
+            else if (error == OTA_RECEIVE_ERROR) Serial.println(F("Receive Failed"));
+            else if (error == OTA_END_ERROR) Serial.println(F("End Failed"));
+            display.showMessage("OTA Error!", "Check serial");
+        });
+        ArduinoOTA.begin();
+    }
+
     // Initial temperature reading
     Serial.println(F("Reading temperatures..."));
     temps.requestTemperatures();
@@ -373,8 +401,13 @@ void loop() {
     }
     lastDay = currentDay;
 
-    // Small delay to prevent watchdog issues
-    yield();
+    // Handle OTA updates
+    if (wifiConnected) {
+        ArduinoOTA.handle();
+    }
+
+    // Delay to prevent watchdog issues and give WiFi stack time for beacons
+    delay(1);
 }
 
 // ============================================================================
@@ -407,9 +440,12 @@ void handleEncoderEvents() {
             break;
 
         case EncoderHandler::EVENT_BUTTON_VERY_LONG:
-            // Enter AP mode
+            // Enter AP mode - clear menu state first
+            if (inMenu) {
+                display.exitMenu();
+                inMenu = false;
+            }
             Serial.println(F("Entering AP mode via button"));
-            display.showMessage("Entering", "AP Mode...");
             wifi.forceAPMode();
             break;
 
