@@ -63,9 +63,8 @@ public:
         WiFi.mode(WIFI_OFF);
         delay(500);
 
-        // Generate AP SSID with chip ID (must be done at runtime)
-        _apSSID = "ShopThermostat-" + String(ESP.getChipId(), HEX);
-        _apSSID.toUpperCase();
+        // Fixed AP SSID
+        _apSSID = "shopThermostat";
 
         if (_config->hasWifiCredentials()) {
             WiFi.mode(WIFI_STA);
@@ -147,11 +146,9 @@ public:
         WiFi.mode(WIFI_OFF);
         delay(500);
 
-        WiFi.mode(WIFI_AP);
-        WiFi.setOutputPower(20.5);  // Max TX power (20.5 dBm)
-        WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
-        delay(200);
-        WiFi.softAP(_apSSID.c_str(), DEFAULT_AP_PASSWORD, 1, false, 4);
+        // Use AP_STA so WiFi scans work without dropping AP clients
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAP(_apSSID.c_str(), "");
 
         // Start DNS server for captive portal
         _dnsServer->start(53, "*", WiFi.softAPIP());
@@ -224,12 +221,7 @@ public:
     void startScan() {
         if (_scanInProgress) return;
 
-        // Need to be in STA or AP+STA mode to scan
-        if (WiFi.getMode() == WIFI_AP) {
-            WiFi.mode(WIFI_AP_STA);
-            delay(100);
-        }
-
+        // Already in AP_STA mode, no mode switch needed
         Serial.println(F("Starting async WiFi scan..."));
         WiFi.scanNetworks(true);  // async=true
         _scanInProgress = true;
@@ -260,11 +252,7 @@ public:
 
         WiFi.scanDelete();
 
-        // Restore AP mode
-        if (_apMode) {
-            WiFi.mode(WIFI_AP);
-        }
-
+        // Stay in AP_STA mode - switching back to AP drops connected clients
         return count;
     }
 

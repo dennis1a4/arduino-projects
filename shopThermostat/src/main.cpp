@@ -267,11 +267,13 @@ void setup() {
         ArduinoOTA.begin();
     }
 
-    // Initial temperature reading
-    Serial.println(F("Reading temperatures..."));
-    temps.requestTemperatures();
-    delay(800); // Wait for conversion
-    temps.update();
+    // Initial temperature reading (skip blocking read in AP mode)
+    if (!wifi.isAPMode()) {
+        Serial.println(F("Reading temperatures..."));
+        temps.requestTemperatures();
+        delay(800); // Wait for conversion
+        temps.update();
+    }
 
     Serial.println(F("====================================="));
     Serial.println(F("  Initialization Complete!"));
@@ -313,18 +315,31 @@ void loop() {
         systemState = STATE_OFFLINE;
     }
 
+    // In AP mode, skip heavy processing to keep WiFi stack responsive for DHCP
+    if (wifi.isAPMode()) {
+        // Only update display occasionally
+        if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+            uptimeSeconds = now / 1000;
+            display.update();
+            lastDisplayUpdate = now;
+        }
+        delay(10);
+        return;
+    }
+
+    // Give WiFi stack time between each major operation
+    yield();
+
     // Temperature reading (every 30 seconds)
     if (now - lastTempRead >= TEMP_READ_INTERVAL || lastTempRead == 0) {
         temps.requestTemperatures();
         lastTempRead = now;
-
-        // Update readings after conversion time
-        // Note: We'll update on next iteration since we use non-blocking mode
     }
 
     // Update temperature readings (slightly after request)
     if (now - lastTempRead > 800 && now - lastTempRead < 1000) {
         temps.update();
+        yield();
 
         // Log temperatures to serial
         const TemperatureManager::Readings& readings = temps.getReadings();
@@ -346,6 +361,7 @@ void loop() {
     if (now - lastControlUpdate >= CONTROL_INTERVAL) {
         controller.update();
         lastControlUpdate = now;
+        yield();
     }
 
     // Schedule check (every 60 seconds)
@@ -356,8 +372,8 @@ void loop() {
         lastScheduleCheck = now;
     }
 
-    // Display update (every second)
-    if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+    // Display update (every 2 seconds to reduce I2C bus time)
+    if (now - lastDisplayUpdate >= 2000) {
         // Update uptime
         uptimeSeconds = scheduler.getUptimeSeconds();
 
@@ -365,7 +381,7 @@ void loop() {
         if (inMenu && now - menuTimeout > MENU_TIMEOUT_MS) {
             display.exitMenu();
             inMenu = false;
-            config.save();  // Save any changes made in menu
+            config.save();
         }
 
         // Update display
@@ -373,6 +389,7 @@ void loop() {
             display.update();
         }
         lastDisplayUpdate = now;
+        yield();
     }
 
     // MQTT handling
@@ -406,8 +423,8 @@ void loop() {
         ArduinoOTA.handle();
     }
 
-    // Delay to prevent watchdog issues and give WiFi stack time for beacons
-    delay(1);
+    // Give WiFi stack generous time for web server and beacons
+    delay(5);
 }
 
 // ============================================================================

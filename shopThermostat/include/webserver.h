@@ -637,6 +637,7 @@ public:
         doc["firmware"] = FIRMWARE_VERSION;
         doc["chip_id"] = String(ESP.getChipId(), HEX);
         doc["free_heap"] = ESP.getFreeHeap();
+        doc["uptime"] = millis() / 1000;
 
         String response;
         serializeJson(doc, response);
