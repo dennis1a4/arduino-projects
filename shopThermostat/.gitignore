@@ -25,3 +25,6 @@ Thumbs.db
 
 # Serena
 .serena/
+
+# Local dev scripts
+mock_server.py
