@@ -387,6 +387,7 @@ public:
             _config->zones[zoneId].enabled = doc["enabled"];
         }
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -490,6 +491,7 @@ public:
         sched.endHour = endTime.substring(0, 2).toInt();
         sched.endMinute = endTime.substring(3, 5).toInt();
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -512,6 +514,7 @@ public:
         _config->schedules[index].enabled = false;
         _config->schedules[index].days = 0;
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -548,6 +551,7 @@ public:
         }
         strlcpy(_config->mqtt.baseTopic, doc["base_topic"] | DEFAULT_MQTT_BASE_TOPIC, sizeof(_config->mqtt.baseTopic));
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -669,6 +673,7 @@ public:
             _config->system.minCycleTime = doc["min_cycle_time"];
         }
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -710,6 +715,7 @@ public:
             }
         }
 
+        _config->save();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 

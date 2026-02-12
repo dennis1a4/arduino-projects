@@ -715,6 +715,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({zone, target, hysteresis})
             });
+            await fetch('/api/save', {method: 'POST'});
             toast('Settings saved');
         }
 
@@ -730,6 +731,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
+            await fetch('/api/save', {method: 'POST'});
             toast('Calibration saved');
         }
 
@@ -882,6 +884,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
+            await fetch('/api/save', {method: 'POST'});
             toast('MQTT settings saved');
         }
 
@@ -977,6 +980,7 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
+            await fetch('/api/save', {method: 'POST'});
             toast('System settings saved');
         }
 
