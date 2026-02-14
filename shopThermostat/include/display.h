@@ -419,6 +419,7 @@ public:
                 }
                 break;
         }
+        _config->requestSave();
     }
 
     void updateMenu() {
