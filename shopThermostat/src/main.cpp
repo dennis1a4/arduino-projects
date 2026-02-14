@@ -50,6 +50,8 @@ WebServerManager webServer(&config, &temps, &controller, &scheduler, &wifi);
 // ============================================================================
 
 unsigned long lastTempRead = 0;
+unsigned long tempRequestTime = 0;
+bool tempConversionPending = false;
 unsigned long lastControlUpdate = 0;
 unsigned long lastScheduleCheck = 0;
 unsigned long lastDisplayUpdate = 0;
@@ -334,13 +336,16 @@ void loop() {
     yield();
 
     // Temperature reading (every 30 seconds)
-    if (now - lastTempRead >= TEMP_READ_INTERVAL || lastTempRead == 0) {
+    if (!tempConversionPending && (now - lastTempRead >= TEMP_READ_INTERVAL || lastTempRead == 0)) {
         temps.requestTemperatures();
-        lastTempRead = now;
+        tempRequestTime = now;
+        tempConversionPending = true;
     }
 
-    // Update temperature readings (slightly after request)
-    if (now - lastTempRead > 800 && now - lastTempRead < 1000) {
+    // Update temperature readings once conversion is complete (750ms for 12-bit)
+    if (tempConversionPending && now - tempRequestTime >= 1000) {
+        tempConversionPending = false;
+        lastTempRead = now;
         temps.update();
         yield();
 
