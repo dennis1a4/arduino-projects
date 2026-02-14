@@ -342,8 +342,8 @@ void loop() {
         tempConversionPending = true;
     }
 
-    // Update temperature readings once conversion is complete (750ms for 12-bit)
-    if (tempConversionPending && now - tempRequestTime >= 1000) {
+    // Update temperature readings once conversion is complete (750ms for 12-bit, +margin for WiFi delays)
+    if (tempConversionPending && now - tempRequestTime >= 1200) {
         tempConversionPending = false;
         lastTempRead = now;
         temps.update();

@@ -97,6 +97,7 @@
 #define MAX_RUNTIME_MS              14400000 // 4 hours in milliseconds
 #define MIN_CYCLE_TIME_MS           300000  // 5 minutes
 #define SENSOR_FAULT_TIMEOUT_MS     300000  // 5 minutes
+#define MAX_CONSECUTIVE_FAILURES    3       // Stale reads before ERR (3 cycles = ~90s)
 #define MANUAL_OVERRIDE_TIMEOUT_MS  7200000 // 2 hours
 
 // ============================================================================

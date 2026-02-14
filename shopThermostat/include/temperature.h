@@ -41,9 +41,29 @@ private:
     unsigned long _lastReadTime;
     unsigned long _sensorFaultTime[SENSOR_COUNT];
     bool _sensorFault[SENSOR_COUNT];
+    float _lastGoodValue[SENSOR_COUNT];
+    uint8_t _consecutiveFailures[SENSOR_COUNT];
 
     bool isValidReading(float temp) {
         return temp > TEMP_MIN_VALID && temp < TEMP_MAX_VALID && temp != TEMP_ERROR_VALUE;
+    }
+
+    float readSensorWithRetry(DeviceAddress addr) {
+        float temp = _sensors->getTempC(addr);
+        if (isValidReading(temp)) return temp;
+
+        for (int retry = 0; retry < 2; retry++) {
+            delayMicroseconds(100);
+            yield();
+            temp = _sensors->getTempC(addr);
+            if (isValidReading(temp)) {
+                Serial.print(F("  OneWire retry "));
+                Serial.print(retry + 1);
+                Serial.println(F(" succeeded"));
+                return temp;
+            }
+        }
+        return temp;  // still invalid after retries
     }
 
 public:
@@ -57,6 +77,8 @@ public:
             _readings.valid[i] = false;
             _sensorFaultTime[i] = 0;
             _sensorFault[i] = false;
+            _lastGoodValue[i] = 0.0f;
+            _consecutiveFailures[i] = 0;
         }
 
         _readings.floor = 0;
@@ -156,58 +178,42 @@ public:
     void update() {
         _readings.timestamp = millis();
 
-        // Read each sensor
-        float rawFloor = _sensors->getTempC(_addresses.floor);
-        float rawAir = _sensors->getTempC(_addresses.air);
-        float rawOutdoor = _sensors->getTempC(_addresses.outdoor);
-        float rawWaterIn = _sensors->getTempC(_addresses.waterIn);
-        float rawWaterOut = _sensors->getTempC(_addresses.waterOut);
+        // Read each sensor with retry
+        DeviceAddress* addrs[] = {
+            &_addresses.floor, &_addresses.air, &_addresses.outdoor,
+            &_addresses.waterIn, &_addresses.waterOut
+        };
+        float* readingSlots[] = {
+            &_readings.floor, &_readings.air, &_readings.outdoor,
+            &_readings.waterIn, &_readings.waterOut
+        };
 
-        // Validate and apply calibration
-        _readings.valid[SENSOR_FLOOR] = isValidReading(rawFloor);
-        _readings.valid[SENSOR_AIR] = isValidReading(rawAir);
-        _readings.valid[SENSOR_OUTDOOR] = isValidReading(rawOutdoor);
-        _readings.valid[SENSOR_WATER_IN] = isValidReading(rawWaterIn);
-        _readings.valid[SENSOR_WATER_OUT] = isValidReading(rawWaterOut);
+        for (int i = 0; i < SENSOR_COUNT; i++) {
+            float raw = readSensorWithRetry(*addrs[i]);
+            bool valid = isValidReading(raw);
 
-        if (_readings.valid[SENSOR_FLOOR]) {
-            _readings.floor = rawFloor + _calibration[SENSOR_FLOOR];
-            _sensorFaultTime[SENSOR_FLOOR] = 0;
-            _sensorFault[SENSOR_FLOOR] = false;
-        } else {
-            handleSensorFault(SENSOR_FLOOR);
-        }
-
-        if (_readings.valid[SENSOR_AIR]) {
-            _readings.air = rawAir + _calibration[SENSOR_AIR];
-            _sensorFaultTime[SENSOR_AIR] = 0;
-            _sensorFault[SENSOR_AIR] = false;
-        } else {
-            handleSensorFault(SENSOR_AIR);
-        }
-
-        if (_readings.valid[SENSOR_OUTDOOR]) {
-            _readings.outdoor = rawOutdoor + _calibration[SENSOR_OUTDOOR];
-            _sensorFaultTime[SENSOR_OUTDOOR] = 0;
-            _sensorFault[SENSOR_OUTDOOR] = false;
-        } else {
-            handleSensorFault(SENSOR_OUTDOOR);
-        }
-
-        if (_readings.valid[SENSOR_WATER_IN]) {
-            _readings.waterIn = rawWaterIn + _calibration[SENSOR_WATER_IN];
-            _sensorFaultTime[SENSOR_WATER_IN] = 0;
-            _sensorFault[SENSOR_WATER_IN] = false;
-        } else {
-            handleSensorFault(SENSOR_WATER_IN);
-        }
-
-        if (_readings.valid[SENSOR_WATER_OUT]) {
-            _readings.waterOut = rawWaterOut + _calibration[SENSOR_WATER_OUT];
-            _sensorFaultTime[SENSOR_WATER_OUT] = 0;
-            _sensorFault[SENSOR_WATER_OUT] = false;
-        } else {
-            handleSensorFault(SENSOR_WATER_OUT);
+            if (valid) {
+                readingSlots[i][0] = raw + _calibration[i];
+                _lastGoodValue[i] = readingSlots[i][0];
+                _consecutiveFailures[i] = 0;
+                _readings.valid[i] = true;
+                _sensorFaultTime[i] = 0;
+                _sensorFault[i] = false;
+            } else {
+                _consecutiveFailures[i]++;
+                if (_consecutiveFailures[i] < MAX_CONSECUTIVE_FAILURES && _lastGoodValue[i] != 0.0f) {
+                    // Use stale value — better than ERR
+                    readingSlots[i][0] = _lastGoodValue[i];
+                    _readings.valid[i] = true;
+                    Serial.print(getSensorName(i));
+                    Serial.print(F(" read failed, using last good value ("));
+                    Serial.print(_consecutiveFailures[i]);
+                    Serial.println(F(" consecutive)"));
+                } else {
+                    _readings.valid[i] = false;
+                    handleSensorFault(i);
+                }
+            }
         }
 
         // Calculate delta-T if both water sensors valid
