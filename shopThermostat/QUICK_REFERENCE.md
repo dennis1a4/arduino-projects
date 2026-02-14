@@ -55,6 +55,17 @@ Pump: 3h 24m    08:00-17:00 20° Up: 5d 3h 22m
 > Reboot System
 ```
 
+## Setting Target Temperature from Front Panel
+
+1. **Hold** encoder button for 3 seconds to enter menu
+2. **Rotate** encoder to highlight `Floor Target` or `Air Target`
+3. **Short press** encoder button — brackets appear around the value: `[18.0°C]`
+4. **Rotate** encoder to adjust (0.5° per click)
+5. **Short press** encoder button to confirm
+6. **Hold** encoder 3 seconds to exit menu
+
+Changes are saved to flash automatically and persist across reboots.
+
 ## Status Indicators
 
 | Display | Meaning |
