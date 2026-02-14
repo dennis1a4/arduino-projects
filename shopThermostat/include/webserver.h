@@ -185,13 +185,10 @@ public:
             handleResetThermal(request, data, len);
         });
 
-        // Save config
+        // Save config (deferred to main loop to avoid flash writes in async context)
         _server->on("/api/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            if (_config->save()) {
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(500, "application/json", "{\"error\":\"save failed\"}");
-            }
+            _config->requestSave();
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
         });
 
         // Captive portal redirect
@@ -387,7 +384,7 @@ public:
             _config->zones[zoneId].enabled = doc["enabled"];
         }
 
-        _config->save();
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -491,7 +488,7 @@ public:
         sched.endHour = endTime.substring(0, 2).toInt();
         sched.endMinute = endTime.substring(3, 5).toInt();
 
-        _config->save();
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -514,7 +511,7 @@ public:
         _config->schedules[index].enabled = false;
         _config->schedules[index].days = 0;
 
-        _config->save();
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -534,10 +531,12 @@ public:
     }
 
     void handleSetMqtt(AsyncWebServerRequest *request, uint8_t *data, size_t len) {
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         DeserializationError error = deserializeJson(doc, data, len);
 
         if (error) {
+            Serial.print(F("MQTT JSON parse error: "));
+            Serial.println(error.c_str());
             request->send(400, "application/json", "{\"error\":\"invalid json\"}");
             return;
         }
@@ -546,12 +545,17 @@ public:
         strlcpy(_config->mqtt.broker, doc["broker"] | "", sizeof(_config->mqtt.broker));
         _config->mqtt.port = doc["port"] | DEFAULT_MQTT_PORT;
         strlcpy(_config->mqtt.username, doc["username"] | "", sizeof(_config->mqtt.username));
-        if (doc.containsKey("password") && strlen(doc["password"]) > 0) {
-            strlcpy(_config->mqtt.password, doc["password"], sizeof(_config->mqtt.password));
+        const char* pwd = doc["password"] | "";
+        if (strlen(pwd) > 0) {
+            strlcpy(_config->mqtt.password, pwd, sizeof(_config->mqtt.password));
         }
         strlcpy(_config->mqtt.baseTopic, doc["base_topic"] | DEFAULT_MQTT_BASE_TOPIC, sizeof(_config->mqtt.baseTopic));
 
-        _config->save();
+        Serial.printf("MQTT SET: enabled=%d broker='%s' port=%d user='%s' topic='%s'\n",
+            _config->mqtt.enabled, _config->mqtt.broker, _config->mqtt.port,
+            _config->mqtt.username, _config->mqtt.baseTopic);
+
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -673,7 +677,7 @@ public:
             _config->system.minCycleTime = doc["min_cycle_time"];
         }
 
-        _config->save();
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 
@@ -715,7 +719,7 @@ public:
             }
         }
 
-        _config->save();
+        _config->requestSave();
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     }
 

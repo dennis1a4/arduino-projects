@@ -1,8 +1,8 @@
 # Functional Specification Document: Smart Dual-Zone Shop Thermostat
 
 **Project**: ESP8266-Based Dual-Zone Thermostat with Home Assistant Integration  
-**Version**: 1.1  
-**Date**: January 25, 2026  
+**Version**: 1.2
+**Date**: February 14, 2026
 **Platform**: Wemos D1 Mini (ESP8266)
 
 ---
@@ -704,20 +704,163 @@ WaterSystemStatus checkWaterSystem(float delta_t) {
 
 ### 5.5 Configuration Storage
 
-**Stored in LittleFS (JSON format)**:
+All persistent settings are stored in a single JSON file on the ESP8266's LittleFS flash filesystem.
+Runtime state (override mode, relay state, uptime) is **not** persisted and resets on reboot.
+
+**Storage Details:**
+- **File**: `/config.json` on LittleFS partition
+- **Format**: JSON, serialized/deserialized via ArduinoJson 6.x `DynamicJsonDocument(4096)`
+- **Write Safety**: Flash writes are deferred via `requestSave()` / `handlePendingSave()` so they
+  execute in the main loop, never inside the async web server TCP callback (which would stall the
+  WiFi radio and trigger a watchdog reset)
+- **Boot Sequence**: `setDefaults()` → `begin()` (mount LittleFS) → `load()` (overwrite defaults
+  from file). If the file is missing or corrupt, defaults are used.
+
+#### 5.5.1 Persisted Settings Map
+
+The table below lists every field stored in `/config.json`, its JSON key path, the in-memory
+C struct/field it maps to, the data type and size limits, and the default value applied when no
+saved config exists.
+
+**WiFi Configuration** (`WifiConfig wifi`)
+
+| JSON Key Path | C Field | Type / Max Size | Default | Notes |
+|---|---|---|---|---|
+| `wifi.ssid` | `wifi.ssid` | `char[32]` | `""` | Station SSID |
+| `wifi.password` | `wifi.password` | `char[64]` | `""` | Station password (plaintext) |
+
+**MQTT Configuration** (`MqttConfig mqtt`)
+
+| JSON Key Path | C Field | Type / Max Size | Default | Notes |
+|---|---|---|---|---|
+| `mqtt.enabled` | `mqtt.enabled` | `bool` | `false` | Master MQTT enable |
+| `mqtt.broker` | `mqtt.broker` | `char[64]` | `""` | Broker hostname or IP |
+| `mqtt.port` | `mqtt.port` | `uint16_t` | `1883` | Broker port |
+| `mqtt.username` | `mqtt.username` | `char[32]` | `""` | Auth username (optional) |
+| `mqtt.password` | `mqtt.password` | `char[32]` | `""` | Auth password (optional) |
+| `mqtt.baseTopic` | `mqtt.baseTopic` | `char[64]` | `"homeassistant/climate/shop_thermostat"` | Prefix for all pub/sub topics |
+
+**Zone Configuration** (`ZoneConfig zones[2]`) — indexed by `ZONE_FLOOR=0`, `ZONE_AIR=1`
+
+| JSON Key Path | C Field | Type | Default (Floor / Air) | Notes |
+|---|---|---|---|---|
+| `zones.floor.target` | `zones[0].targetTemp` | `float` | `5.0` / `18.0` | Target temperature °C |
+| `zones.floor.hysteresis` | `zones[0].hysteresis` | `float` | `2.0` / `1.0` | Switching band °C |
+| `zones.floor.enabled` | `zones[0].enabled` | `bool` | `true` / `true` | Zone enabled |
+
+*(Air zone uses the same structure under `zones.air.*`)*
+
+**Water Monitoring** (`WaterConfig water`)
+
+| JSON Key Path | C Field | Type | Default | Notes |
+|---|---|---|---|---|
+| `water_monitoring.enabled` | `water.enabled` | `bool` | `true` | Enable water monitoring |
+| `water_monitoring.delta_t_warning_low` | `water.deltaTWarningLow` | `float` | `1.0` | Low delta-T warning °C |
+| `water_monitoring.delta_t_warning_high` | `water.deltaTWarningHigh` | `float` | `15.0` | High delta-T warning °C |
+| `water_monitoring.smart_pump_control` | `water.smartPumpControl` | `bool` | `false` | Pump inhibit on low delta-T |
+
+**Sensor Configuration** (`SensorConfig sensors`)
+
+| JSON Key Path | C Field | Type / Max Size | Default | Notes |
+|---|---|---|---|---|
+| `sensors.floor` | `sensors.addresses[0]` | `char[17]` (16 hex + null) | `""` | DS18B20 ROM address |
+| `sensors.air` | `sensors.addresses[1]` | `char[17]` | `""` | |
+| `sensors.outdoor` | `sensors.addresses[2]` | `char[17]` | `""` | |
+| `sensors.water_in` | `sensors.addresses[3]` | `char[17]` | `""` | |
+| `sensors.water_out` | `sensors.addresses[4]` | `char[17]` | `""` | |
+| `sensors.calibration.floor` | `sensors.calibration[0]` | `float` | `0.0` | Offset applied to reading |
+| `sensors.calibration.air` | `sensors.calibration[1]` | `float` | `0.0` | |
+| `sensors.calibration.outdoor` | `sensors.calibration[2]` | `float` | `0.0` | |
+| `sensors.calibration.water_in` | `sensors.calibration[3]` | `float` | `0.0` | |
+| `sensors.calibration.water_out` | `sensors.calibration[4]` | `float` | `0.0` | |
+
+**System Configuration** (`SystemConfig system`)
+
+| JSON Key Path | C Field | Type / Max Size | Default | Notes |
+|---|---|---|---|---|
+| `system.device_name` | `system.deviceName` | `char[32]` | `"Shop Thermostat"` | mDNS / HA device name |
+| `system.timezone` | `system.timezone` | `char[32]` | `"America/Winnipeg"` | POSIX TZ or Olson name |
+| `system.temp_unit` | `system.useFahrenheit` | `bool` (stored as `"C"` or `"F"`) | `"C"` | Display unit preference |
+| `system.max_runtime` | `system.maxRuntime` | `unsigned long` (ms) | `14400000` (4 h) | Safety cutoff per zone |
+| `system.min_cycle_time` | `system.minCycleTime` | `unsigned long` (ms) | `300000` (5 min) | Minimum relay off gap |
+
+**Schedules** (`Schedule schedules[7]`) — stored as JSON array, max `MAX_SCHEDULES=7` entries
+
+| JSON Key Path | C Field | Type | Default | Notes |
+|---|---|---|---|---|
+| `schedules[i].enabled` | `schedules[i].enabled` | `bool` | `false` | Schedule active flag |
+| `schedules[i].zone` | `schedules[i].zone` | `uint8_t` (stored as `"floor"` / `"air"`) | `ZONE_AIR` | Target zone |
+| `schedules[i].target_temp` | `schedules[i].targetTemp` | `float` | `18.0` | Temp during schedule |
+| `schedules[i].days` | `schedules[i].days` | `uint8_t` bitmask (stored as int array `[0..6]`) | `0` | Bit 0=Sun .. Bit 6=Sat |
+| `schedules[i].start_time` | `schedules[i].startHour/startMinute` | `uint8_t` pair (stored as `"HH:MM"`) | `"08:00"` | Period start |
+| `schedules[i].end_time` | `schedules[i].endHour/endMinute` | `uint8_t` pair (stored as `"HH:MM"`) | `"17:00"` | Period end |
+
+*Only schedules with `enabled==true` or `days!=0` are written to the file.*
+
+#### 5.5.2 Settings NOT Persisted (Runtime-Only)
+
+These values reset to their defaults on every boot:
+
+| Setting | Struct Field | Reset Value | Notes |
+|---|---|---|---|
+| Zone override mode | `zones[i].override` | `OVERRIDE_AUTO` | Manual overrides are temporary |
+| Override timestamp | `zones[i].overrideTime` | `0` | Timeout counter |
+| Relay state | (controller) | `OFF` | Re-evaluated by control logic |
+| MQTT connection state | (mqtt handler) | disconnected | Reconnects automatically |
+| WiFi connection state | (wifi manager) | disconnected | Reconnects from saved creds |
+
+#### 5.5.3 Web API ↔ Storage Key Mapping
+
+The web API uses **snake_case** keys while the JSON file uses **camelCase** for some MQTT fields.
+This table clarifies the mapping for MQTT (the most common source of confusion):
+
+| Web API Key (POST/GET) | JSON File Key | C Struct Field |
+|---|---|---|
+| `enabled` | `mqtt.enabled` | `mqtt.enabled` |
+| `broker` | `mqtt.broker` | `mqtt.broker` |
+| `port` | `mqtt.port` | `mqtt.port` |
+| `username` | `mqtt.username` | `mqtt.username` |
+| `password` | `mqtt.password` | `mqtt.password` |
+| `base_topic` | `mqtt.baseTopic` | `mqtt.baseTopic` |
+
+#### 5.5.4 Save Trigger Points
+
+Configuration is saved to flash at these points:
+
+| Trigger | Method | Context |
+|---|---|---|
+| Web API POST (`/api/zone`, `/api/schedule`, `/api/mqtt`, `/api/system`, `/api/sensors`) | `requestSave()` → deferred `save()` | Async web callback → main loop |
+| Web API POST `/api/save` | `requestSave()` → deferred `save()` | Explicit save button |
+| WiFi credential change | `config.save()` direct | `connectToNetwork()` in main loop |
+| Sensor auto-discovery | `config.save()` direct | `setup()` |
+| Menu exit (encoder long-press) | `config.save()` direct | Main loop |
+| Menu timeout (10s inactivity) | `config.save()` direct | Main loop |
+
+#### 5.5.5 Example `/config.json`
 
 ```json
 {
   "wifi": {
     "ssid": "MyNetwork",
-    "password": "encrypted"
+    "password": "wifi_pass"
   },
   "mqtt": {
+    "enabled": true,
     "broker": "192.168.1.100",
     "port": 1883,
     "username": "homeassistant",
-    "password": "encrypted",
-    "enabled": true
+    "password": "mqtt_pass",
+    "baseTopic": "homeassistant/climate/shop_thermostat"
+  },
+  "zones": {
+    "floor": { "target": 5.0, "hysteresis": 2.0, "enabled": true },
+    "air":   { "target": 20.0, "hysteresis": 1.0, "enabled": true }
+  },
+  "water_monitoring": {
+    "enabled": true,
+    "delta_t_warning_low": 1.0,
+    "delta_t_warning_high": 15.0,
+    "smart_pump_control": false
   },
   "sensors": {
     "floor": "28FF1234567890AB",
@@ -726,37 +869,27 @@ WaterSystemStatus checkWaterSystem(float delta_t) {
     "water_in": "28FF4567890123DE",
     "water_out": "28FF5678901234EF",
     "calibration": {
-      "floor": 0.0,
-      "air": 0.0,
-      "outdoor": 0.0,
-      "water_in": 0.0,
-      "water_out": 0.0
+      "floor": 0.0, "air": 0.0, "outdoor": 0.0,
+      "water_in": 0.0, "water_out": 0.0
     }
   },
-  "zones": {
-    "floor": {
-      "target": 5.0,
-      "hysteresis": 2.0,
-      "enabled": true
-    },
-    "air": {
-      "target": 20.0,
-      "hysteresis": 1.0,
-      "enabled": true
-    }
-  },
-  "water_monitoring": {
-    "enabled": true,
-    "delta_t_warning_low": 1.0,
-    "delta_t_warning_high": 15.0,
-    "smart_pump_control": false
-  },
-  "schedules": [...],
   "system": {
     "device_name": "Shop Thermostat",
     "timezone": "America/Winnipeg",
-    "temp_unit": "C"
-  }
+    "temp_unit": "C",
+    "max_runtime": 14400000,
+    "min_cycle_time": 300000
+  },
+  "schedules": [
+    {
+      "enabled": true,
+      "zone": "air",
+      "target_temp": 20.0,
+      "days": [1,2,3,4,5],
+      "start_time": "08:00",
+      "end_time": "17:00"
+    }
+  ]
 }
 ```
 
@@ -1345,6 +1478,7 @@ All sensors share common:
 |---------|------|--------|---------|
 | 1.0 | 2026-01-25 | Initial | Complete FSD created |
 | 1.1 | 2026-01-25 | Updated | Added water tank monitoring (2 additional sensors) |
+| 1.2 | 2026-02-14 | Updated | Expanded §5.5 with full configuration storage map, persisted vs runtime settings, web API key mapping, and save trigger points |
 
 ---
 

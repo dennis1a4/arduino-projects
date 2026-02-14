@@ -300,6 +300,9 @@ void loop() {
     // Handle pending WiFi connection (scheduled from web interface)
     wifi.handlePendingConnect();
 
+    // Handle deferred config saves (flash writes unsafe in async web context)
+    config.handlePendingSave();
+
     // Update WiFi connection
     wifi.update();
     wifiConnected = wifi.isConnected();

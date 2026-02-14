@@ -860,14 +860,18 @@
         }
 
         async function loadMqtt() {
-            const res = await fetch('/api/mqtt');
-            const data = await res.json();
+            try {
+                const res = await fetch('/api/mqtt');
+                const data = await res.json();
 
-            document.getElementById('mqtt-enabled').checked = data.enabled;
-            document.getElementById('mqtt-broker').value = data.broker;
-            document.getElementById('mqtt-port').value = data.port;
-            document.getElementById('mqtt-user').value = data.username;
-            document.getElementById('mqtt-topic').value = data.base_topic;
+                document.getElementById('mqtt-enabled').checked = data.enabled;
+                document.getElementById('mqtt-broker').value = data.broker || '';
+                document.getElementById('mqtt-port').value = data.port || 1883;
+                document.getElementById('mqtt-user').value = data.username || '';
+                document.getElementById('mqtt-topic').value = data.base_topic || '';
+            } catch (e) {
+                toast('Failed to load MQTT settings', true);
+            }
         }
 
         async function saveMqtt() {
@@ -879,13 +883,20 @@
                 password: document.getElementById('mqtt-pass').value,
                 base_topic: document.getElementById('mqtt-topic').value
             };
-            await fetch('/api/mqtt', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            await fetch('/api/save', {method: 'POST'});
-            toast('MQTT settings saved');
+            try {
+                const res = await fetch('/api/mqtt', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                if (!res.ok) {
+                    toast('Failed to save MQTT settings (error ' + res.status + ')', true);
+                    return;
+                }
+                toast('MQTT settings saved');
+            } catch (e) {
+                toast('Error saving MQTT settings', true);
+            }
         }
 
         async function loadWifi() {

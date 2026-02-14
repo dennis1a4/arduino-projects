@@ -76,10 +76,27 @@ public:
 
 private:
     bool _initialized;
+    volatile bool _savePending;
 
 public:
-    ConfigManager() : _initialized(false) {
+    ConfigManager() : _initialized(false), _savePending(false) {
         setDefaults();
+    }
+
+    // Schedule a save from the main loop (safe to call from async context)
+    void requestSave() {
+        _savePending = true;
+    }
+
+    // Call from loop() to perform deferred saves outside async context
+    void handlePendingSave() {
+        if (_savePending) {
+            _savePending = false;
+            Serial.println(F("Deferred save triggered"));
+            Serial.printf("  MQTT before save: enabled=%d broker='%s' user='%s'\n",
+                mqtt.enabled, mqtt.broker, mqtt.username);
+            save();
+        }
     }
 
     void setDefaults() {
