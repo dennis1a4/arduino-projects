@@ -37,6 +37,9 @@ private:
     ThermostatController* _controller;
     ScheduleManager* _scheduler;
     WiFiConnectionManager* _wifi;
+    static const size_t MAX_BODY_SIZE = 1024;
+    uint8_t _bodyBuf[MAX_BODY_SIZE];
+    size_t _bodyLen;
 
 public:
     WebServerManager(ConfigManager* config, TemperatureManager* temps,
@@ -47,7 +50,15 @@ public:
           _temps(temps),
           _controller(controller),
           _scheduler(scheduler),
-          _wifi(wifi) {}
+          _wifi(wifi), _bodyLen(0) {}
+
+    // Accumulate body chunks into _bodyBuf. Call from the onBody callback.
+    void accumulateBody(uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0) _bodyLen = 0;  // reset on first chunk
+        if (_bodyLen + len > MAX_BODY_SIZE) return;  // overflow protection
+        memcpy(_bodyBuf + _bodyLen, data, len);
+        _bodyLen += len;
+    }
 
     void begin() {
         // Create server instance (deferred to avoid global construction issues)
@@ -87,16 +98,16 @@ public:
 
         // Set zone settings
         _server->on("/api/zone", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetZone(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetZone(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Set override
         _server->on("/api/override", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetOverride(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetOverride(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Get schedules
@@ -106,16 +117,16 @@ public:
 
         // Set schedule
         _server->on("/api/schedule", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetSchedule(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetSchedule(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Delete schedule
         _server->on("/api/schedule/delete", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleDeleteSchedule(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleDeleteSchedule(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // MQTT settings
@@ -124,9 +135,9 @@ public:
         });
 
         _server->on("/api/mqtt", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetMqtt(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetMqtt(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // WiFi settings (scan must be registered before /api/wifi to avoid prefix match)
@@ -143,9 +154,9 @@ public:
         });
 
         _server->on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetWifi(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetWifi(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // System settings
@@ -154,9 +165,9 @@ public:
         });
 
         _server->on("/api/system", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetSystem(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetSystem(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Sensor discovery
@@ -166,9 +177,9 @@ public:
 
         // Set sensor addresses
         _server->on("/api/sensors", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleSetSensors(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleSetSensors(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Reboot
@@ -180,9 +191,9 @@ public:
 
         // Reset thermal runaway
         _server->on("/api/reset/thermal", HTTP_POST, [this](AsyncWebServerRequest *request) {
-            // Body handled in onBody
+            handleResetThermal(request, _bodyBuf, _bodyLen);
         }, NULL, [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-            handleResetThermal(request, data, len);
+            accumulateBody(data, len, index, total);
         });
 
         // Save config (deferred to main loop to avoid flash writes in async context)
